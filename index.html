@@ -3,31 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Tracker</title>
+    <title>Task Tracker Dashboard</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        /* Hide scrollbar for Chrome, Safari and Opera */
+        /* Hide scrollbar for clean UI */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
-        /* Hide scrollbar for IE, Edge and Firefox */
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Safe area for mobile devices */
+        /* Safe padding for mobile devices */
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
     </style>
 </head>
-<body class="bg-slate-50 font-sans overflow-hidden">
+<body class="bg-slate-50 font-sans overflow-hidden text-gray-800">
     
-    <!-- Main App Container -->
-    <div id="app" class="flex flex-col lg:flex-row h-screen"></div>
+    <!-- Main App Wrapper -->
+    <div id="app" class="flex flex-col lg:flex-row h-screen w-full"></div>
     
-    <!-- Modal Container -->
+    <!-- Modals Wrapper -->
     <div id="modal-root"></div>
 
     <script>
-        // --- BASE DATA & CONSTANTS ---
-        const TODAY = '2026-06-10';
+        // ==========================================
+        // 1. CONSTANTS & CONFIGURATION
+        // ==========================================
+        const TODAY = '2026-06-11'; // Current system date
         const TAILWIND_COLORS = [
             'bg-red-500', 'bg-orange-500', 'bg-amber-500', 
             'bg-green-500', 'bg-teal-500', 'bg-blue-500', 
@@ -49,12 +50,23 @@
             { id: 'Settings', name: 'Settings', icon: 'settings' }
         ];
 
-        // --- STATE MANAGEMENT ---
-        let state = {
+        // Generate Month Options (2026 - 2030)
+        let monthOptions = [];
+        for(let y = 2026; y <= 2030; y++) {
+            let startM = (y === 2026) ? 5 : 0; // Starts from June 2026
+            for(let m = startM; m < 12; m++) monthOptions.push({ label: `${MONTH_NAMES[m]} ${y}`, m, y });
+        }
+
+        // ==========================================
+        // 2. STATE MANAGEMENT & LOCAL STORAGE
+        // ==========================================
+        window.state = {
             activeTab: 'Dashboard',
             userName: 'Tata',
             theme: THEMES[0],
             searchQuery: '',
+            
+            // Data
             categories: [
                 { name: 'Audit', color: 'bg-purple-500' },
                 { name: 'Content', color: 'bg-orange-500' }
@@ -64,12 +76,7 @@
             ],
             projects: [
                 {
-                    id: 1,
-                    title: 'United Tractors',
-                    startDate: '2026-06-06',
-                    endDate: '2026-08-06',
-                    category: 'Audit',
-                    progress: 33,
+                    id: 1, title: 'United Tractors', startDate: '2026-06-06', endDate: '2026-08-06', category: 'Audit', progress: 33,
                     actions: [
                         { id: 101, text: 'Compile asset inventory', date: '2026-06-09', isCompleted: true },
                         { id: 102, text: 'Review visual identity', date: TODAY, isCompleted: false },
@@ -77,42 +84,48 @@
                     ]
                 }
             ],
-            calMonth: 5, // June
-            calYear: 2026,
-            selectedDate: TODAY,
             
-            // Modals
-            isTaskModalOpen: false,
-            isProjectModalOpen: false,
-            isEditingProject: false,
+            // UI States
+            calMonth: 5, calYear: 2026, selectedDate: TODAY,
+            isTaskModalOpen: false, isProjectModalOpen: false, isEditingProject: false,
             
             // Forms
             taskForm: { title: '', date: TODAY, endDate: '', time: '', isAllDay: false, details: '', category: '', projectId: '' },
             projectForm: { id: null, title: '', startDate: TODAY, endDate: '', category: '', actions: [] },
-            newCategoryInput: '',
-            newCategoryColor: TAILWIND_COLORS[0],
-            
-            // Inline Editing Actions
-            editingAction: null, // { projectId, actionId, text, date }
-            newInlineAction: { projectId: null, text: '', date: TODAY }
+            newCategoryInput: '', newCategoryColor: TAILWIND_COLORS[0],
+            editingAction: null, newInlineAction: { projectId: null, text: '', date: TODAY }
         };
 
-        // --- UTILITIES ---
-        const getDaysInMonth = (m, y) => new Date(y, m + 1, 0).getDate();
-        const getFirstDayOfMonth = (m, y) => new Date(y, m, 1).getDay();
-        
-        let monthOptions = [];
-        for(let y = 2026; y <= 2030; y++) {
-            let startM = (y === 2026) ? 5 : 0;
-            for(let m = startM; m < 12; m++) {
-                monthOptions.push({ label: `${MONTH_NAMES[m]} ${y}`, m, y });
-            }
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem('taskTrackerData');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    window.state.userName = data.userName || window.state.userName;
+                    window.state.theme = data.theme || window.state.theme;
+                    window.state.categories = data.categories || window.state.categories;
+                    window.state.tasks = data.tasks || window.state.tasks;
+                    window.state.projects = data.projects || window.state.projects;
+                }
+            } catch (e) { console.error("Error loading data:", e); }
         }
 
-        // --- MAIN RENDER FUNCTIONS ---
+        window.saveToStorage = function() {
+            const dataToSave = {
+                userName: window.state.userName,
+                theme: window.state.theme,
+                categories: window.state.categories,
+                tasks: window.state.tasks,
+                projects: window.state.projects
+            };
+            localStorage.setItem('taskTrackerData', JSON.stringify(dataToSave));
+        };
+
+        // ==========================================
+        // 3. CORE RENDERING ENGINE
+        // ==========================================
         function renderApp() {
-            const app = document.getElementById('app');
-            app.innerHTML = `
+            document.getElementById('app').innerHTML = `
                 ${renderMobileHeader()}
                 ${renderDesktopSidebar()}
                 ${renderMainContent()}
@@ -121,39 +134,41 @@
             lucide.createIcons();
         }
 
-        function renderModals() {
-            const modalRoot = document.getElementById('modal-root');
-            let html = '';
-            if (state.isTaskModalOpen) html += renderTaskModal();
-            if (state.isProjectModalOpen) html += renderProjectModal();
-            modalRoot.innerHTML = html;
-            lucide.createIcons();
-        }
-
         function refreshTab() {
             const content = document.getElementById('tab-content');
             if (content) {
-                if (state.activeTab === 'Dashboard') content.innerHTML = viewDashboard();
-                else if (state.activeTab === 'My Tasks') content.innerHTML = viewMyTasks();
-                else if (state.activeTab === 'Projects') content.innerHTML = viewProjects();
-                else if (state.activeTab === 'Settings') content.innerHTML = viewSettings();
+                if (window.state.activeTab === 'Dashboard') content.innerHTML = viewDashboard();
+                else if (window.state.activeTab === 'My Tasks') content.innerHTML = viewMyTasks();
+                else if (window.state.activeTab === 'Projects') content.innerHTML = viewProjects();
+                else if (window.state.activeTab === 'Settings') content.innerHTML = viewSettings();
                 lucide.createIcons();
             }
         }
 
-        // --- LAYOUT COMPONENTS ---
+        function renderModals() {
+            const modalRoot = document.getElementById('modal-root');
+            let html = '';
+            if (window.state.isTaskModalOpen) html += renderTaskModal();
+            if (window.state.isProjectModalOpen) html += renderProjectModal();
+            modalRoot.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        // ==========================================
+        // 4. LAYOUT COMPONENTS
+        // ==========================================
         function renderMobileHeader() {
             return `
-            <header class="lg:hidden ${state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
+            <header class="lg:hidden ${window.state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 rounded-full border-2 border-white/20 bg-black/20 flex items-center justify-center">
-                        <span class="font-bold text-lg uppercase user-initial-display">${state.userName.charAt(0)}</span>
+                        <span class="font-bold text-lg uppercase">${window.state.userName.charAt(0)}</span>
                     </div>
                     <div>
                         <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-1">
                             <i data-lucide="check-square" class="w-4 h-4 opacity-80"></i> Tracker
                         </h1>
-                        <p class="text-[10px] ${state.theme.accentText}">Hello, <span class="user-name-display">${state.userName}</span></p>
+                        <p class="text-[10px] ${window.state.theme.accentText}">Hello, ${window.state.userName}</p>
                     </div>
                 </div>
             </header>`;
@@ -161,131 +176,122 @@
 
         function renderDesktopSidebar() {
             const navItems = TABS.map(t => `
-                <button onclick="window.setActiveTab('${t.id}')" class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${state.activeTab === t.id ? 'bg-white/10 font-medium shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'}">
-                    <i data-lucide="${t.icon}" class="w-5 h-5"></i>
-                    ${t.name}
+                <button onclick="window.setActiveTab('${t.id}')" class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${window.state.activeTab === t.id ? 'bg-white/10 font-medium shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'}">
+                    <i data-lucide="${t.icon}" class="w-5 h-5"></i> ${t.name}
                 </button>
             `).join('');
 
             return `
-            <aside class="hidden lg:flex w-64 ${state.theme.mainBg} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
+            <aside class="hidden lg:flex w-64 ${window.state.theme.mainBg} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
                 <div class="p-8 pb-4">
                     <div class="flex items-center gap-2 mb-10 font-bold text-xl tracking-wide">
-                        <i data-lucide="check-square" class="w-6 h-6 ${state.theme.accentText}"></i> Tracker
+                        <i data-lucide="check-square" class="w-6 h-6 ${window.state.theme.accentText}"></i> Tracker
                     </div>
                     <div class="flex flex-col items-center mb-6">
                         <div class="w-20 h-20 rounded-full border-4 border-white/20 bg-black/20 flex items-center justify-center mb-4 shadow-lg">
-                            <span class="text-3xl font-bold uppercase user-initial-display">${state.userName.charAt(0)}</span>
+                            <span class="text-3xl font-bold uppercase">${window.state.userName.charAt(0)}</span>
                         </div>
-                        <h2 class="font-semibold text-lg user-name-display">${state.userName}</h2>
+                        <h2 class="font-semibold text-lg">${window.state.userName}</h2>
                     </div>
                 </div>
-                <nav class="flex-1 px-4 space-y-2" id="desktop-nav">${navItems}</nav>
+                <nav class="flex-1 px-4 space-y-2">${navItems}</nav>
             </aside>`;
         }
 
         function renderMobileNav() {
-            const navItems = TABS.map(t => {
-                const isActive = state.activeTab === t.id;
-                return `
-                <button onclick="window.setActiveTab('${t.id}')" class="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${isActive ? state.theme.mainText : 'text-gray-400'}">
-                    <i data-lucide="${t.icon}" class="w-5 h-5 ${isActive ? 'fill-current opacity-20' : ''}"></i>
+            const navItems = TABS.map(t => `
+                <button onclick="window.setActiveTab('${t.id}')" class="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${window.state.activeTab === t.id ? window.state.theme.mainText : 'text-gray-400'}">
+                    <i data-lucide="${t.icon}" class="w-5 h-5 ${window.state.activeTab === t.id ? 'fill-current opacity-20' : ''}"></i>
                     <span class="text-[9px] font-bold">${t.name}</span>
-                </button>`;
-            }).join('');
+                </button>
+            `).join('');
 
-            return `
-            <div class="lg:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40 flex justify-around items-center h-16 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]" id="mobile-nav">
-                ${navItems}
-            </div>`;
+            return `<div class="lg:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40 flex justify-around items-center h-16 pb-safe shadow-lg">${navItems}</div>`;
         }
 
         function renderMainContent() {
-            const title = state.activeTab === 'Dashboard' ? `Hello, <span class="user-name-display">${state.userName}</span>` : TABS.find(t=>t.id === state.activeTab).name;
+            const title = window.state.activeTab === 'Dashboard' ? `Hello, ${window.state.userName}` : TABS.find(t=>t.id === window.state.activeTab).name;
             
             return `
             <main class="flex-1 p-4 lg:p-10 pb-28 lg:pb-10 overflow-y-auto scrollbar-hide flex flex-col relative">
                 <!-- Desktop Header -->
-                <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 flex-shrink-0" id="main-header-desktop">
+                <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 flex-shrink-0">
                     <div>
-                        <h1 class="text-3xl font-bold text-gray-800 tracking-tight" id="desktop-title">${title}</h1>
-                        <p class="text-gray-500 mt-1">Wednesday, 10 Jun 2026</p>
+                        <h1 class="text-3xl font-bold tracking-tight">${title}</h1>
+                        <p class="text-gray-500 mt-1">Today is ${TODAY}</p>
                     </div>
                     <div class="flex items-center gap-4 w-full md:w-auto">
                         <div class="relative w-full md:w-64">
                             <i data-lucide="search" class="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                            <input type="text" oninput="window.handleSearch(this.value)" value="${state.searchQuery}" placeholder="Search tasks..." class="pl-10 pr-4 py-2.5 bg-white rounded-full text-sm border-none shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200 w-full" />
+                            <input type="text" oninput="window.handleSearch(this.value)" value="${window.state.searchQuery}" placeholder="Search tasks..." class="pl-10 pr-4 py-2.5 bg-white rounded-full text-sm border-none shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200 w-full" />
                         </div>
                     </div>
                 </header>
 
-                <!-- Mobile Header Area -->
-                <div class="lg:hidden mb-4 space-y-4" id="main-header-mobile">
+                <!-- Mobile Header -->
+                <div class="lg:hidden mb-4 space-y-4">
                     <div class="relative">
                         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" oninput="window.handleSearch(this.value)" value="${state.searchQuery}" placeholder="Search tasks..." class="pl-9 pr-4 py-2 bg-white rounded-full text-xs border border-gray-100 shadow-sm focus:outline-none w-full" />
+                        <input type="text" oninput="window.handleSearch(this.value)" value="${window.state.searchQuery}" placeholder="Search tasks..." class="pl-9 pr-4 py-2 bg-white rounded-full text-xs border border-gray-100 shadow-sm focus:outline-none w-full" />
                     </div>
                     <div class="flex justify-between items-end">
-                        <h1 class="text-xl font-bold text-gray-800 tracking-tight" id="mobile-title">${state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
-                        <p class="text-xs text-gray-500">10 Jun '26</p>
+                        <h1 class="text-xl font-bold tracking-tight">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
+                        <p class="text-xs text-gray-500">${TODAY}</p>
                     </div>
                 </div>
 
-                <!-- Tab Content -->
+                <!-- Tab Content Router -->
                 <div class="flex-1 max-w-6xl w-full mx-auto" id="tab-content">
-                    ${state.activeTab === 'Dashboard' ? viewDashboard() : ''}
-                    ${state.activeTab === 'My Tasks' ? viewMyTasks() : ''}
-                    ${state.activeTab === 'Projects' ? viewProjects() : ''}
-                    ${state.activeTab === 'Settings' ? viewSettings() : ''}
+                    ${window.state.activeTab === 'Dashboard' ? viewDashboard() : ''}
+                    ${window.state.activeTab === 'My Tasks' ? viewMyTasks() : ''}
+                    ${window.state.activeTab === 'Projects' ? viewProjects() : ''}
+                    ${window.state.activeTab === 'Settings' ? viewSettings() : ''}
                 </div>
 
-                <!-- FAB -->
-                <button onclick="window.openTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-xl ${state.theme.hoverBg} hover:scale-105 transition-all z-30 group" title="Add New Task">
+                <!-- Global Add Task Button -->
+                <button onclick="window.openTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-xl ${window.state.theme.hoverBg} hover:scale-105 transition-all z-30 group" title="Add New Task">
                     <i data-lucide="plus" class="w-6 h-6 lg:w-8 lg:h-8 group-hover:rotate-90 transition-transform duration-300"></i>
                 </button>
             </main>`;
         }
 
-        // --- VIEWS RENDERING FUNCTIONS ---
-
+        // ==========================================
+        // 5. TAB VIEWS
+        // ==========================================
         function getAgendaData() {
             let combined = [];
-            if (state.searchQuery.trim() !== '') {
-                const q = state.searchQuery.toLowerCase();
-                const mTasks = state.tasks.filter(t => t.title.toLowerCase().includes(q) || (t.details && t.details.toLowerCase().includes(q)));
-                const mActions = state.projects.flatMap(p => p.actions.filter(a => a.text.toLowerCase().includes(q)).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+            if (window.state.searchQuery.trim() !== '') {
+                const q = window.state.searchQuery.toLowerCase();
+                const mTasks = window.state.tasks.filter(t => t.title.toLowerCase().includes(q) || (t.details && t.details.toLowerCase().includes(q)));
+                const mActions = window.state.projects.flatMap(p => p.actions.filter(a => a.text.toLowerCase().includes(q)).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
                 combined = [...mTasks, ...mActions];
             } else {
-                const aTasks = state.tasks.filter(t => t.date === state.selectedDate);
-                const aActions = state.projects.flatMap(p => p.actions.filter(a => a.date === state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+                const aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
+                const aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
                 combined = [...aTasks, ...aActions];
             }
             return combined;
         }
 
-        function renderAgendaList(limit = false) {
-            const agenda = getAgendaData();
-            let items = limit ? agenda.filter(t => !(t.done || t.isCompleted)).slice(0, 5) : agenda;
-            
+        function renderAgendaList() {
+            const items = getAgendaData();
             if (items.length === 0) {
-                return `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">
-                    ${state.searchQuery ? 'No tasks found matching your search.' : 'No tasks or actions scheduled.'}
-                </p>`;
+                return `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">${window.state.searchQuery ? 'No tasks found.' : 'No tasks or actions scheduled.'}</p>`;
             }
 
-            return items.map((item, idx) => {
+            return items.map((item) => {
                 const isDone = item.done || item.isCompleted;
-                const projCat = item.isProjectAction ? state.projects.find(p=>p.id === item.projectId)?.category : null;
-                const catColorStr = (state.categories.find(c => c.name === (projCat || item.category)) || {}).color || 'bg-gray-300';
+                const projCat = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId)?.category : null;
+                const catColorStr = (window.state.categories.find(c => c.name === (projCat || item.category)) || {}).color || 'bg-gray-300';
                 
                 return `
                 <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-start gap-3 lg:gap-4 transition-all relative overflow-hidden ${isDone ? 'bg-gray-50 border-gray-100 opacity-60' : 'bg-white shadow-sm'}">
                     <div class="absolute left-0 top-0 bottom-0 w-1 ${catColorStr}"></div>
-                    <button onclick="${item.isProjectAction ? `window.toggleProjectAction(${item.projectId}, ${item.id})` : `window.toggleTask(${item.id})`}" class="flex-shrink-0 text-gray-400 hover:${state.theme.mainText} mt-0.5 ml-1 lg:ml-2">
-                        <i data-lucide="${isDone ? 'check-circle-2' : 'circle'}" class="w-5 h-5 lg:w-6 lg:h-6 ${isDone ? state.theme.mainText : ''}"></i>
+                    <button onclick="${item.isProjectAction ? `window.toggleProjectAction(${item.projectId}, ${item.id})` : `window.toggleTask(${item.id})`}" class="flex-shrink-0 text-gray-400 hover:${window.state.theme.mainText} mt-0.5 ml-1 lg:ml-2">
+                        <i data-lucide="${isDone ? 'check-circle-2' : 'circle'}" class="w-5 h-5 lg:w-6 lg:h-6 ${isDone ? window.state.theme.mainText : ''}"></i>
                     </button>
                     <div class="flex-1 overflow-hidden">
-                        <h4 class="font-bold text-sm lg:text-base text-gray-800 truncate ${isDone ? 'line-through' : ''}">${item.title || item.text}</h4>
+                        <h4 class="font-bold text-sm lg:text-base truncate ${isDone ? 'line-through text-gray-500' : 'text-gray-800'}">${item.title || item.text}</h4>
                         ${item.isProjectAction 
                             ? `<p class="text-[10px] lg:text-xs text-gray-500 font-medium mt-1 flex items-center gap-1 truncate"><i data-lucide="briefcase" class="w-3 h-3 flex-shrink-0"></i> Project: ${item.projectTitle}</p>`
                             : `<div class="text-[10px] lg:text-xs text-gray-500 mt-1 flex gap-3 truncate">
@@ -299,32 +305,23 @@
         }
 
         function viewDashboard() {
-            let sumCompleted = 0; let sumToDo = 0;
-            state.tasks.forEach(t => {
-                const d = new Date(t.date);
-                if (d.getMonth() === state.calMonth && d.getFullYear() === state.calYear) { if (t.done) sumCompleted++; else sumToDo++; }
-            });
-            state.projects.forEach(p => {
-                p.actions.forEach(a => {
-                    const d = new Date(a.date);
-                    if (d.getMonth() === state.calMonth && d.getFullYear() === state.calYear) { if (a.isCompleted) sumCompleted++; else sumToDo++; }
-                });
-            });
-            const sumActiveProjects = state.projects.filter(p => {
-                const start = new Date(p.startDate);
-                const end = p.endDate ? new Date(p.endDate) : new Date(2099, 11, 31);
-                const filterStart = new Date(state.calYear, state.calMonth, 1);
-                const filterEnd = new Date(state.calYear, state.calMonth + 1, 0);
+            let sumComp = 0, sumToDo = 0;
+            window.state.tasks.forEach(t => { const d = new Date(t.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { t.done ? sumComp++ : sumToDo++; }});
+            window.state.projects.forEach(p => { p.actions.forEach(a => { const d = new Date(a.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { a.isCompleted ? sumComp++ : sumToDo++; }});});
+            
+            const sumActiveProjects = window.state.projects.filter(p => {
+                const start = new Date(p.startDate), end = p.endDate ? new Date(p.endDate) : new Date(2099, 11, 31);
+                const filterStart = new Date(window.state.calYear, window.state.calMonth, 1), filterEnd = new Date(window.state.calYear, window.state.calMonth + 1, 0);
                 return start <= filterEnd && end >= filterStart;
             }).length;
 
-            const optsHTML = monthOptions.map(opt => `<option value="${opt.m}-${opt.y}" ${opt.m === state.calMonth && opt.y === state.calYear ? 'selected' : ''}>${opt.label}</option>`).join('');
+            const optsHTML = monthOptions.map(opt => `<option value="${opt.m}-${opt.y}" ${opt.m === window.state.calMonth && opt.y === window.state.calYear ? 'selected' : ''}>${opt.label}</option>`).join('');
 
             return `
             <div class="grid grid-cols-1 xl:grid-cols-12 gap-6 lg:gap-8">
                 <section class="xl:col-span-7">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg lg:text-xl font-bold text-gray-800">Task Summary</h2>
+                        <h2 class="text-lg lg:text-xl font-bold">Task Summary</h2>
                         <div class="relative">
                             <select onchange="window.changeSummaryMonth(this.value)" class="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-3 pr-8 rounded-xl focus:outline-none focus:ring-1 focus:ring-gray-300 text-xs lg:text-sm font-medium shadow-sm cursor-pointer">${optsHTML}</select>
                             <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none"></i>
@@ -332,73 +329,62 @@
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 lg:gap-4">
                         <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                            <span class="text-2xl lg:text-3xl font-bold text-gray-800 mb-1">${sumCompleted}</span>
+                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumComp}</span>
                             <span class="text-xs lg:text-sm font-medium text-gray-600">Completed</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[state.calMonth]}</span>
+                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[window.state.calMonth]}</span>
                         </div>
                         <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                            <span class="text-2xl lg:text-3xl font-bold text-gray-800 mb-1">${sumToDo}</span>
+                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumToDo}</span>
                             <span class="text-xs lg:text-sm font-medium text-gray-600">To Do</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[state.calMonth]}</span>
+                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[window.state.calMonth]}</span>
                         </div>
                         <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center col-span-2 sm:col-span-1">
-                            <span class="text-2xl lg:text-3xl font-bold text-gray-800 mb-1">${sumActiveProjects}</span>
+                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumActiveProjects}</span>
                             <span class="text-xs lg:text-sm font-medium text-gray-600">Projects</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">Active in ${MONTH_NAMES[state.calMonth]}</span>
+                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">Active in ${MONTH_NAMES[window.state.calMonth]}</span>
                         </div>
                     </div>
                 </section>
                 <section class="xl:col-span-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg lg:text-xl font-bold text-gray-800">${state.searchQuery ? 'Search Results' : `Tasks for ${state.selectedDate}`}</h2>
-                    </div>
+                    <h2 class="text-lg lg:text-xl font-bold mb-4">${window.state.searchQuery ? 'Search Results' : `Tasks for ${window.state.selectedDate}`}</h2>
                     <div class="space-y-3 lg:space-y-4" id="agenda-list-container">
-                        ${renderAgendaList(true)}
+                        ${renderAgendaList()}
                     </div>
                 </section>
             </div>`;
         }
 
         function viewMyTasks() {
-            const daysInMonth = getDaysInMonth(state.calMonth, state.calYear);
-            const startDay = getFirstDayOfMonth(state.calMonth, state.calYear);
+            const daysInMonth = new Date(window.state.calYear, window.state.calMonth + 1, 0).getDate();
+            const startDay = new Date(window.state.calYear, window.state.calMonth, 1).getDay();
             
             let calDaysHTML = '';
-            for(let i=0; i<startDay; i++) {
-                calDaysHTML += `<div class="min-h-[60px] lg:min-h-[100px] border border-gray-50 rounded-lg lg:rounded-xl bg-gray-50/50 p-1 lg:p-2"></div>`;
-            }
+            for(let i = 0; i < startDay; i++) calDaysHTML += `<div class="min-h-[60px] lg:min-h-[100px] border border-gray-50 rounded-lg lg:rounded-xl bg-gray-50/50 p-1 lg:p-2"></div>`;
             
-            for(let day=1; day<=daysInMonth; day++) {
-                const dateStr = `${state.calYear}-${(state.calMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-                const isSelected = state.selectedDate === dateStr;
+            for(let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${window.state.calYear}-${String(window.state.calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isSelected = window.state.selectedDate === dateStr;
                 const isToday = dateStr === TODAY;
                 
-                const dayTasks = state.tasks.filter(t => t.date === dateStr);
-                const activeProjectsForDay = state.projects.filter(p => dateStr >= p.startDate && (!p.endDate || dateStr <= p.endDate));
+                const dayTasks = window.state.tasks.filter(t => t.date === dateStr);
+                const activeProjects = window.state.projects.filter(p => dateStr >= p.startDate && (!p.endDate || dateStr <= p.endDate));
 
-                let projBlocks = activeProjectsForDay.map(p => {
-                    const catColor = (state.categories.find(c => c.name === p.category) || {}).color || 'bg-gray-500';
-                    return `<div class="${catColor} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
+                let projBlocks = activeProjects.map(p => {
+                    const color = (window.state.categories.find(c => c.name === p.category) || {}).color || 'bg-gray-500';
+                    return `<div class="${color} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
                 }).join('');
 
                 let taskDots = dayTasks.map(t => {
-                    const catColor = (state.categories.find(c => c.name === t.category) || {}).color || 'bg-gray-500';
-                    return `
-                    <div class="flex items-center gap-1 overflow-hidden">
-                        <div class="w-1 lg:w-1.5 h-1 lg:h-1.5 rounded-full flex-shrink-0 ${catColor}"></div>
-                        <span class="text-[8px] lg:text-[10px] font-medium truncate hidden sm:inline ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}">${t.title}</span>
-                    </div>`;
+                    const color = (window.state.categories.find(c => c.name === t.category) || {}).color || 'bg-gray-500';
+                    return `<div class="flex items-center gap-1 overflow-hidden"><div class="w-1 lg:w-1.5 h-1 lg:h-1.5 rounded-full flex-shrink-0 ${color}"></div><span class="text-[8px] lg:text-[10px] font-medium truncate hidden sm:inline ${t.done ? 'line-through text-gray-400' : 'text-gray-700'}">${t.title}</span></div>`;
                 }).join('');
 
-                const selClasses = isSelected ? `${state.theme.mainBorder} shadow-md ${state.theme.lightBg}` : 'border-gray-200 bg-white hover:border-gray-300';
-                const circleClasses = isToday ? 'bg-orange-500 text-white' : (isSelected ? `${state.theme.mainBg} text-white` : 'text-gray-600');
-
                 calDaysHTML += `
-                <div onclick="window.selectDate('${dateStr}')" class="min-h-[60px] lg:min-h-[110px] border rounded-lg lg:rounded-xl relative transition cursor-pointer flex flex-col overflow-hidden ${selClasses}">
+                <div onclick="window.selectDate('${dateStr}')" class="min-h-[60px] lg:min-h-[110px] border rounded-lg lg:rounded-xl relative transition cursor-pointer flex flex-col overflow-hidden ${isSelected ? `${window.state.theme.mainBorder} shadow-md ${window.state.theme.lightBg}` : 'border-gray-200 bg-white hover:border-gray-300'}">
                     <div class="w-full flex flex-col mb-0.5 lg:mb-1">${projBlocks}</div>
                     <div class="px-1 lg:px-2 pb-1 lg:pb-2 flex-1 flex flex-col">
                         <div class="flex justify-between items-center mb-0.5 lg:mb-1">
-                            <span class="text-[10px] lg:text-sm font-bold w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full ${circleClasses}">${day}</span>
+                            <span class="text-[10px] lg:text-sm font-bold w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-orange-500 text-white' : (isSelected ? `${window.state.theme.mainBg} text-white` : 'text-gray-600')}">${day}</span>
                         </div>
                         <div class="flex-1 overflow-hidden space-y-0.5 lg:space-y-1 mt-0.5 lg:mt-1">${taskDots}</div>
                     </div>
@@ -410,10 +396,10 @@
                 <!-- Calendar -->
                 <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
                     <div class="flex justify-between items-center mb-4 lg:mb-6 min-w-[300px]">
-                        <h2 class="text-xl lg:text-2xl font-bold text-gray-800">${MONTH_NAMES[state.calMonth]} ${state.calYear}</h2>
+                        <h2 class="text-xl lg:text-2xl font-bold">${MONTH_NAMES[window.state.calMonth]} ${window.state.calYear}</h2>
                         <div class="flex gap-2">
-                            <button onclick="window.changeMonth(-1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${state.calYear === 2026 && state.calMonth === 5 ? 'disabled' : ''}><i data-lucide="chevron-left" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
-                            <button onclick="window.changeMonth(1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${state.calYear === 2030 && state.calMonth === 11 ? 'disabled' : ''}><i data-lucide="chevron-right" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
+                            <button onclick="window.changeMonth(-1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${window.state.calYear === 2026 && window.state.calMonth === 5 ? 'disabled' : ''}><i data-lucide="chevron-left" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
+                            <button onclick="window.changeMonth(1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${window.state.calYear === 2030 && window.state.calMonth === 11 ? 'disabled' : ''}><i data-lucide="chevron-right" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
                         </div>
                     </div>
                     <div class="grid grid-cols-7 gap-1 lg:gap-2 mb-1 lg:mb-2 min-w-[300px]">
@@ -423,22 +409,21 @@
                 </div>
                 <!-- Agenda -->
                 <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex-1">
-                    <h2 class="text-lg lg:text-xl font-bold text-gray-800 mb-4 lg:mb-6 flex items-center gap-2">
-                        <i data-lucide="clock" class="w-5 h-5 lg:w-6 lg:h-6 ${state.theme.mainText}"></i>
-                        ${state.searchQuery ? 'Search Results' : 'Agenda'} <span class="text-xs lg:text-sm font-normal text-gray-500">(${state.searchQuery ? `"${state.searchQuery}"` : state.selectedDate})</span>
+                    <h2 class="text-lg lg:text-xl font-bold mb-4 lg:mb-6 flex items-center gap-2">
+                        <i data-lucide="clock" class="w-5 h-5 lg:w-6 lg:h-6 ${window.state.theme.mainText}"></i>
+                        ${window.state.searchQuery ? 'Search Results' : 'Agenda'} <span class="text-xs lg:text-sm font-normal text-gray-500">(${window.state.searchQuery ? `"${window.state.searchQuery}"` : window.state.selectedDate})</span>
                     </h2>
                     <div class="space-y-3 lg:space-y-4" id="agenda-list-container">
-                        ${renderAgendaList(false)}
+                        ${renderAgendaList()}
                     </div>
                 </div>
             </div>`;
         }
 
         function viewProjects() {
-            const projectsHTML = state.projects.map(project => {
-                const catColor = (state.categories.find(c => c.name === project.category) || {}).color || 'bg-gray-500';
-                
-                let sortedActions = [...project.actions].sort((a, b) => {
+            const projectsHTML = window.state.projects.map(project => {
+                const catColor = (window.state.categories.find(c => c.name === project.category) || {}).color || 'bg-gray-500';
+                const sortedActions = [...project.actions].sort((a, b) => {
                     if (a.isCompleted && !b.isCompleted) return 1;
                     if (!a.isCompleted && b.isCompleted) return -1;
                     if (!a.isCompleted && !b.isCompleted) return a.date.localeCompare(b.date);
@@ -446,16 +431,16 @@
                 });
 
                 const actionsHTML = sortedActions.map(action => {
-                    const isEditing = state.editingAction?.actionId === action.id;
+                    const isEditing = window.state.editingAction?.actionId === action.id;
                     const isDeadlineToday = action.date === TODAY && !action.isCompleted;
 
                     if (isEditing) {
                         return `
                         <div class="flex items-center gap-2 lg:gap-3 p-2 rounded-xl transition border bg-white border-gray-100 shadow-sm flex-wrap sm:flex-nowrap">
                             <div class="flex-1 flex flex-wrap sm:flex-nowrap gap-2 w-full">
-                                <input type="text" id="edit-act-txt" value="${state.editingAction.text}" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs lg:text-sm outline-none w-full sm:w-auto"/>
-                                <input type="date" id="edit-act-date" value="${state.editingAction.date}" class="border border-gray-200 rounded px-2 py-1 text-xs lg:text-sm outline-none"/>
-                                <button onclick="window.saveInlineEditAction()" class="${state.theme.mainBg} text-white p-1.5 rounded ${state.theme.hoverBg}"><i data-lucide="save" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
+                                <input type="text" id="edit-act-txt" value="${window.state.editingAction.text.replace(/"/g, '&quot;')}" class="flex-1 border border-gray-200 rounded px-2 py-1 text-xs lg:text-sm outline-none w-full sm:w-auto"/>
+                                <input type="date" id="edit-act-date" value="${window.state.editingAction.date}" class="border border-gray-200 rounded px-2 py-1 text-xs lg:text-sm outline-none"/>
+                                <button onclick="window.saveInlineEditAction()" class="${window.state.theme.mainBg} text-white p-1.5 rounded ${window.state.theme.hoverBg}"><i data-lucide="save" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
                                 <button onclick="window.cancelInlineEdit()" class="bg-gray-200 text-gray-600 p-1.5 rounded hover:bg-gray-300"><i data-lucide="x" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
                             </div>
                         </div>`;
@@ -464,30 +449,30 @@
                     return `
                     <div class="flex items-center gap-2 lg:gap-3 p-2 rounded-xl transition border ${action.isCompleted ? 'bg-gray-50 border-transparent opacity-60' : 'bg-white border-gray-100 shadow-sm flex-wrap sm:flex-nowrap'}">
                         <button onclick="window.toggleProjectAction(${project.id}, ${action.id})" class="flex-shrink-0">
-                            <i data-lucide="${action.isCompleted ? 'check-circle-2' : 'circle'}" class="w-4 h-4 lg:w-5 lg:h-5 ${action.isCompleted ? state.theme.mainText : 'text-gray-300 hover:'+state.theme.mainText}"></i>
+                            <i data-lucide="${action.isCompleted ? 'check-circle-2' : 'circle'}" class="w-4 h-4 lg:w-5 lg:h-5 ${action.isCompleted ? window.state.theme.mainText : 'text-gray-300 hover:'+window.state.theme.mainText}"></i>
                         </button>
-                        <span class="text-xs lg:text-sm flex-1 break-words ${action.isCompleted ? 'line-through text-gray-400' : 'text-gray-800 font-medium'}">${action.text}</span>
+                        <span class="text-xs lg:text-sm flex-1 break-words ${action.isCompleted ? 'line-through text-gray-400' : 'font-medium'}">${action.text}</span>
                         <span class="text-[10px] lg:text-xs px-2 py-1 rounded font-bold whitespace-nowrap ${isDeadlineToday ? 'bg-red-100 text-red-600 border border-red-200' : 'bg-gray-100 text-gray-600 border border-transparent'}">${action.date}</span>
                         <div class="flex gap-1 ml-auto sm:ml-2">
-                            <button onclick="window.setEditingAction(${project.id}, ${action.id}, '${action.text.replace(/'/g, "\\'")}', '${action.date}')" class="p-1.5 text-gray-400 hover:${state.theme.mainText} hover:${state.theme.lightBg} rounded-lg transition"><i data-lucide="edit-2" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
+                            <button onclick="window.setEditingAction(${project.id}, ${action.id}, '${action.text.replace(/'/g, "\\'")}', '${action.date}')" class="p-1.5 text-gray-400 hover:${window.state.theme.mainText} hover:${window.state.theme.lightBg} rounded-lg transition"><i data-lucide="edit-2" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
                             <button onclick="window.deleteProjectAction(${project.id}, ${action.id})" class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"><i data-lucide="trash-2" class="w-3 h-3 lg:w-4 lg:h-4"></i></button>
                         </div>
                     </div>`;
                 }).join('');
 
-                const newActionHTML = state.newInlineAction.projectId === project.id ? `
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mt-4 p-2 lg:p-3 ${state.theme.lightBg} rounded-xl border border-gray-200">
+                const newActionHTML = window.state.newInlineAction.projectId === project.id ? `
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 mt-4 p-2 lg:p-3 ${window.state.theme.lightBg} rounded-xl border border-gray-200">
                         <div class="flex-1 flex flex-col sm:flex-row gap-2">
-                            <input type="text" id="new-act-txt" placeholder="Action detail..." value="${state.newInlineAction.text}" class="flex-1 border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none" autofocus/>
-                            <input type="date" id="new-act-date" value="${state.newInlineAction.date}" class="border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none"/>
+                            <input type="text" id="new-act-txt" placeholder="Action detail..." value="${window.state.newInlineAction.text.replace(/"/g, '&quot;')}" class="flex-1 border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none" autofocus/>
+                            <input type="date" id="new-act-date" value="${window.state.newInlineAction.date}" class="border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none"/>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="window.addInlineAction(${project.id})" class="${state.theme.mainBg} text-white px-3 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold flex-1 sm:flex-none justify-center flex">Add</button>
+                            <button onclick="window.addInlineAction(${project.id})" class="${window.state.theme.mainBg} text-white px-3 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold flex-1 sm:flex-none justify-center flex">Add</button>
                             <button onclick="window.cancelNewInlineAction()" class="bg-gray-300 text-gray-700 px-3 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold flex-1 sm:flex-none justify-center flex">Cancel</button>
                         </div>
                     </div>
                 ` : `
-                    <button onclick="window.openNewInlineAction(${project.id})" class="mt-2 text-xs lg:text-sm ${state.theme.mainText} font-bold flex items-center gap-1 justify-center w-full py-2 bg-gray-50 rounded-xl border border-dashed border-gray-300 hover:${state.theme.lightBg} transition">
+                    <button onclick="window.openNewInlineAction(${project.id})" class="mt-2 text-xs lg:text-sm ${window.state.theme.mainText} font-bold flex items-center gap-1 justify-center w-full py-2 bg-gray-50 rounded-xl border border-dashed border-gray-300 hover:${window.state.theme.lightBg} transition">
                         <i data-lucide="plus" class="w-3 h-3 lg:w-4 lg:h-4"></i> Add New Action
                     </button>
                 `;
@@ -498,8 +483,8 @@
                     <div class="flex flex-col sm:flex-row sm:justify-between items-start gap-4 mb-4 lg:mb-6 mt-1 lg:mt-2">
                         <div>
                             <div class="flex items-center gap-2 lg:gap-3">
-                                <h3 class="text-lg lg:text-xl font-bold text-gray-800">${project.title}</h3>
-                                <button onclick="window.openEditProject(${project.id})" class="p-1.5 text-gray-400 hover:${state.theme.mainText} hover:${state.theme.lightBg} rounded-lg transition lg:opacity-0 lg:group-hover:opacity-100">
+                                <h3 class="text-lg lg:text-xl font-bold">${project.title}</h3>
+                                <button onclick="window.openEditProject(${project.id})" class="p-1.5 text-gray-400 hover:${window.state.theme.mainText} hover:${window.state.theme.lightBg} rounded-lg transition lg:opacity-0 lg:group-hover:opacity-100">
                                     <i data-lucide="edit-2" class="w-4 h-4"></i>
                                 </button>
                             </div>
@@ -509,7 +494,7 @@
                             </p>
                         </div>
                         <div class="text-left sm:text-right">
-                            <span class="text-xl lg:text-2xl font-bold ${state.theme.mainText}">${project.progress}%</span>
+                            <span class="text-xl lg:text-2xl font-bold ${window.state.theme.mainText}">${project.progress}%</span>
                             <p class="text-[10px] lg:text-xs text-gray-400">Completed</p>
                         </div>
                     </div>
@@ -524,8 +509,8 @@
             return `
             <div class="space-y-6">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                    <h2 class="text-xl lg:text-2xl font-bold text-gray-800">Active Projects</h2>
-                    <button onclick="window.openNewProject()" class="${state.theme.mainBg} text-white px-4 py-2 rounded-xl text-sm font-semibold ${state.theme.hoverBg} transition flex items-center justify-center gap-2">
+                    <h2 class="text-xl lg:text-2xl font-bold">Active Projects</h2>
+                    <button onclick="window.openNewProject()" class="${window.state.theme.mainBg} text-white px-4 py-2 rounded-xl text-sm font-semibold ${window.state.theme.hoverBg} transition flex items-center justify-center gap-2">
                         <i data-lucide="plus" class="w-4 h-4"></i> New Project
                     </button>
                 </div>
@@ -535,10 +520,10 @@
 
         function viewSettings() {
             const themesHTML = THEMES.map(t => `
-                <div onclick="window.changeTheme('${t.id}')" class="border-2 rounded-xl p-3 lg:p-4 cursor-pointer transition-all ${state.theme.id === t.id ? `${t.mainBorder} ${t.lightBg} shadow-md` : 'border-gray-200 hover:border-gray-300'}">
+                <div onclick="window.changeTheme('${t.id}')" class="border-2 rounded-xl p-3 lg:p-4 cursor-pointer transition-all ${window.state.theme.id === t.id ? `${t.mainBorder} ${t.lightBg} shadow-md` : 'border-gray-200 hover:border-gray-300'}">
                     <div class="flex items-center gap-2 lg:gap-3 mb-2">
                         <div class="w-5 h-5 lg:w-6 lg:h-6 rounded-full ${t.mainBg}"></div>
-                        <span class="font-bold text-sm lg:text-base text-gray-800">${t.name}</span>
+                        <span class="font-bold text-sm lg:text-base">${t.name}</span>
                     </div>
                     <div class="flex gap-1">
                         <div class="w-full h-1.5 lg:h-2 rounded-full ${t.mainBg}"></div>
@@ -550,13 +535,13 @@
             return `
             <div class="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 overflow-hidden max-w-3xl">
                 <div class="p-6 lg:p-8 border-b border-gray-100">
-                    <h2 class="text-xl lg:text-2xl font-bold text-gray-800 mb-1 lg:mb-2">Preferences</h2>
+                    <h2 class="text-xl lg:text-2xl font-bold mb-1 lg:mb-2">Preferences</h2>
                     <p class="text-gray-500 text-xs lg:text-sm">Manage your profile and dashboard theme.</p>
                 </div>
                 <div class="p-6 lg:p-8 space-y-8 lg:space-y-10">
                     <div>
                         <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4"></i> Display Name</label>
-                        <input type="text" value="${state.userName}" oninput="window.updateUserName(this.value)" class="w-full md:w-1/2 border border-gray-200 rounded-xl px-4 py-2 lg:py-3 focus:outline-none focus:ring-2 focus:ring-gray-200 text-base lg:text-lg font-medium" />
+                        <input type="text" value="${window.state.userName}" oninput="window.updateUserName(this.value)" class="w-full md:w-1/2 border border-gray-200 rounded-xl px-4 py-2 lg:py-3 focus:outline-none focus:ring-2 focus:ring-gray-200 text-base lg:text-lg font-medium" />
                     </div>
                     <div>
                         <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-3 lg:mb-4 flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4"></i> Dashboard Theme</label>
@@ -566,22 +551,24 @@
             </div>`;
         }
 
-        // --- MODALS ---
+        // ==========================================
+        // 6. MODALS RENDERING
+        // ==========================================
         function renderTaskModal() {
-            const projOpts = state.projects.map(p => `<option value="${p.id}" ${state.taskForm.projectId == p.id ? 'selected' : ''}>${p.title}</option>`).join('');
-            const catOpts = state.categories.map(c => `<option value="${c.name}" ${state.taskForm.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
+            const projOpts = window.state.projects.map(p => `<option value="${p.id}" ${window.state.taskForm.projectId == p.id ? 'selected' : ''}>${p.title}</option>`).join('');
+            const catOpts = window.state.categories.map(c => `<option value="${c.name}" ${window.state.taskForm.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
 
             return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
                 <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-lg font-bold text-gray-800">Create New Task</h3>
+                        <h3 class="text-base lg:text-lg font-bold">Create New Task</h3>
                         <button onclick="window.closeTaskModal()" class="text-gray-400 hover:text-gray-700 bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="p-4 lg:p-6 overflow-y-auto scrollbar-hide space-y-4 lg:space-y-5">
                         <div>
                             <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Task Title</label>
-                            <input type="text" id="tf-title" value="${state.taskForm.title}" placeholder="What needs to be done?" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 focus:outline-none focus:ring-1 focus:ring-gray-300 text-sm lg:text-lg font-medium" />
+                            <input type="text" id="tf-title" value="${window.state.taskForm.title}" placeholder="What needs to be done?" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 focus:outline-none focus:ring-1 focus:ring-gray-300 text-sm lg:text-lg font-medium" />
                         </div>
                         <div>
                             <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="briefcase" class="w-3 h-3 lg:w-4 lg:h-4"></i> Assign to Project</label>
@@ -593,42 +580,42 @@
                         <div class="grid grid-cols-2 gap-3 lg:gap-4 bg-gray-50 p-3 lg:p-4 rounded-xl lg:rounded-2xl border border-gray-100">
                             <div>
                                 <label class="block text-[10px] lg:text-xs font-bold text-gray-500 mb-1">Start Date</label>
-                                <input type="date" id="tf-date" value="${state.taskForm.date}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white" />
+                                <input type="date" id="tf-date" value="${window.state.taskForm.date}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white" />
                             </div>
                             <div>
                                 <label class="block text-[10px] lg:text-xs font-bold text-gray-500 mb-1">End Date</label>
-                                <input type="date" id="tf-end" value="${state.taskForm.endDate}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white" />
+                                <input type="date" id="tf-end" value="${window.state.taskForm.endDate}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white" />
                             </div>
                             <div class="col-span-2 flex flex-row items-center justify-between mt-1 pt-2 lg:mt-2 lg:pt-3 border-t border-gray-200 gap-2">
                                 <div class="flex items-center gap-2">
-                                    <input type="checkbox" id="tf-allday" ${state.taskForm.isAllDay ? 'checked' : ''} onchange="window.toggleTaskFormAllDay(this.checked)" class="w-3 h-3 lg:w-4 lg:h-4 rounded" />
+                                    <input type="checkbox" id="tf-allday" ${window.state.taskForm.isAllDay ? 'checked' : ''} onchange="window.toggleTaskFormAllDay(this.checked)" class="w-3 h-3 lg:w-4 lg:h-4 rounded" />
                                     <label for="tf-allday" class="text-xs lg:text-sm font-medium text-gray-700 whitespace-nowrap">All Day</label>
                                 </div>
-                                ${!state.taskForm.isAllDay ? `<input type="time" id="tf-time" value="${state.taskForm.time}" class="border border-gray-200 rounded-lg px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm outline-none flex-1 bg-white" />` : ''}
+                                ${!window.state.taskForm.isAllDay ? `<input type="time" id="tf-time" value="${window.state.taskForm.time}" class="border border-gray-200 rounded-lg px-2 lg:px-3 py-1 lg:py-1.5 text-xs lg:text-sm outline-none flex-1 bg-white" />` : ''}
                             </div>
                         </div>
-                        ${!state.taskForm.projectId ? `
+                        ${!window.state.taskForm.projectId ? `
                         <div>
                             <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="tag" class="w-3 h-3 lg:w-4 lg:h-4"></i> Category</label>
                             <select id="tf-cat" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white">
-                                <option value="" disabled ${!state.taskForm.category ? 'selected' : ''}>${state.categories.length === 0 ? 'No categories' : 'Select category...'}</option>
+                                <option value="" disabled ${!window.state.taskForm.category ? 'selected' : ''}>${window.state.categories.length === 0 ? 'No categories' : 'Select category...'}</option>
                                 ${catOpts}
                             </select>
                         </div>` : ''}
-                        <button onclick="window.saveTask()" class="w-full bg-gray-900 text-white font-bold py-3 lg:py-3.5 rounded-xl ${state.theme.hoverBg} transition mt-2 lg:mt-4 text-sm lg:text-base">Save Task</button>
+                        <button onclick="window.saveTask()" class="w-full bg-gray-900 text-white font-bold py-3 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition mt-2 lg:mt-4 text-sm lg:text-base">Save Task</button>
                     </div>
                 </div>
             </div>`;
         }
 
         function renderProjectModal() {
-            const catOpts = state.categories.map(c => `<option value="${c.name}" ${state.projectForm.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
-            const colorBtns = TAILWIND_COLORS.map(color => `<button onclick="window.setNewCategoryColor('${color}')" class="w-5 h-5 lg:w-6 lg:h-6 rounded-full ${color} ${state.newCategoryColor === color ? 'ring-2 ring-offset-1 ring-gray-800' : ''}"></button>`).join('');
+            const catOpts = window.state.categories.map(c => `<option value="${c.name}" ${window.state.projectForm.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
+            const colorBtns = TAILWIND_COLORS.map(color => `<button onclick="window.setNewCategoryColor('${color}')" class="w-5 h-5 lg:w-6 lg:h-6 rounded-full ${color} ${window.state.newCategoryColor === color ? 'ring-2 ring-offset-1 ring-gray-800' : ''}"></button>`).join('');
             
-            const actionsHTML = state.projectForm.actions.map((act, i) => `
+            const actionsHTML = window.state.projectForm.actions.map((act) => `
                 <div class="flex items-start gap-2 lg:gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100">
                     <div class="flex-1 space-y-2">
-                        <input type="text" id="pf-act-txt-${act.id}" value="${act.text}" placeholder="Action title..." class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 text-xs lg:text-sm outline-none focus:ring-1 focus:ring-gray-300" />
+                        <input type="text" id="pf-act-txt-${act.id}" value="${act.text.replace(/"/g, '&quot;')}" placeholder="Action title..." class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 text-xs lg:text-sm outline-none focus:ring-1 focus:ring-gray-300" />
                         <input type="date" id="pf-act-date-${act.id}" value="${act.date}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 text-xs lg:text-sm outline-none focus:ring-1 focus:ring-gray-300" />
                     </div>
                     <button onclick="window.removeProjectFormAction(${act.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -639,321 +626,206 @@
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
                 <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-xl font-bold text-gray-800">${state.isEditingProject ? 'Edit Project' : 'Create Project'}</h3>
+                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project' : 'Create Project'}</h3>
                         <button onclick="window.closeProjectModal()" class="text-gray-400 hover:bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="overflow-y-auto p-4 lg:p-6 scrollbar-hide flex-1 space-y-4 lg:space-y-6">
                         <div>
                             <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Project Title</label>
-                            <input type="text" id="pf-title" value="${state.projectForm.title}" placeholder="e.g., Q4 Campaign" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-lg font-medium outline-none" />
+                            <input type="text" id="pf-title" value="${window.state.projectForm.title}" placeholder="e.g., Q4 Campaign" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-lg font-medium outline-none" />
                         </div>
                         <div class="grid grid-cols-2 gap-3 lg:gap-4">
                             <div>
                                 <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Start Date</label>
-                                <input type="date" id="pf-start" value="${state.projectForm.startDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
+                                <input type="date" id="pf-start" value="${window.state.projectForm.startDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
                             </div>
                             <div>
                                 <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">End Date</label>
-                                <input type="date" id="pf-end" value="${state.projectForm.endDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
+                                <input type="date" id="pf-end" value="${window.state.projectForm.endDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Category & Color (Synced)</label>
+                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Category & Color</label>
                             <div class="flex flex-col gap-2 lg:gap-3 mb-2 lg:mb-3 bg-gray-50 p-2 lg:p-3 rounded-xl border border-gray-100">
                                 <div class="flex gap-2">
-                                    <input type="text" id="new-cat-input" value="${state.newCategoryInput}" placeholder="Add new category..." class="flex-1 border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none" />
+                                    <input type="text" id="new-cat-input" value="${window.state.newCategoryInput}" placeholder="Add new category..." class="flex-1 border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none" />
                                     <button onclick="window.addNewCategory()" class="bg-gray-200 text-gray-700 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold hover:bg-gray-300">Add</button>
                                 </div>
                                 <div class="flex gap-1.5 lg:gap-2 flex-wrap">${colorBtns}</div>
                             </div>
                             <select id="pf-cat" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-sm bg-white outline-none">
-                                <option value="" disabled ${!state.projectForm.category ? 'selected' : ''}>${state.categories.length === 0 ? "No categories" : "Select category..."}</option>
+                                <option value="" disabled ${!window.state.projectForm.category ? 'selected' : ''}>${window.state.categories.length === 0 ? "No categories" : "Select category..."}</option>
                                 ${catOpts}
                             </select>
                         </div>
                         <div class="border-t border-gray-100 pt-4">
                             <div class="flex justify-between items-center mb-4">
                                 <label class="block text-sm font-bold text-gray-700">Action Items</label>
-                                <button onclick="window.addProjectFormAction()" class="text-sm ${state.theme.mainText} font-bold flex items-center gap-1 hover:underline"><i data-lucide="plus" class="w-4 h-4"></i> Add Action</button>
+                                <button onclick="window.addProjectFormAction()" class="text-sm ${window.state.theme.mainText} font-bold flex items-center gap-1 hover:underline"><i data-lucide="plus" class="w-4 h-4"></i> Add Action</button>
                             </div>
                             <div class="space-y-3">${actionsHTML}</div>
                         </div>
                     </div>
                     <div class="p-4 lg:p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                        <button onclick="window.saveProject()" class="w-full ${state.theme.mainBg} text-white font-bold py-2.5 lg:py-3.5 rounded-xl ${state.theme.hoverBg} transition text-sm lg:text-base">
-                            ${state.isEditingProject ? 'Save Changes' : 'Launch Project'}
+                        <button onclick="window.saveProject()" class="w-full ${window.state.theme.mainBg} text-white font-bold py-2.5 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition text-sm lg:text-base">
+                            ${window.state.isEditingProject ? 'Save Changes' : 'Launch Project'}
                         </button>
                     </div>
                 </div>
             </div>`;
         }
 
-
-        // --- EVENT HANDLERS ---
-        window.setActiveTab = (tabId) => {
-            state.activeTab = tabId;
-            renderApp();
-        };
-
-        window.updateUserName = (val) => {
-            state.userName = val;
-            document.querySelectorAll('.user-name-display').forEach(el => el.innerText = val);
-            document.querySelectorAll('.user-initial-display').forEach(el => el.innerText = val.charAt(0).toUpperCase());
-        };
-
-        window.changeTheme = (themeId) => {
-            state.theme = THEMES.find(t => t.id === themeId);
-            renderApp();
-        };
-
-        window.handleSearch = (val) => {
-            state.searchQuery = val;
-            const container = document.getElementById('agenda-list-container');
-            if (container) {
-                container.innerHTML = renderAgendaList(state.activeTab === 'Dashboard');
-                lucide.createIcons();
-            }
-        };
-
-        window.changeSummaryMonth = (val) => {
-            const [m, y] = val.split('-');
-            state.calMonth = parseInt(m);
-            state.calYear = parseInt(y);
-            refreshTab();
-        };
-
+        // ==========================================
+        // 7. EVENT HANDLERS
+        // ==========================================
+        window.setActiveTab = (tabId) => { window.state.activeTab = tabId; renderApp(); };
+        window.updateUserName = (val) => { window.state.userName = val; window.saveToStorage(); renderApp(); };
+        window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(); renderApp(); };
+        window.handleSearch = (val) => { window.state.searchQuery = val; refreshTab(); };
+        window.changeSummaryMonth = (val) => { const [m, y] = val.split('-'); window.state.calMonth = parseInt(m); window.state.calYear = parseInt(y); refreshTab(); };
         window.changeMonth = (offset) => {
-            let newM = state.calMonth + offset; let newY = state.calYear;
+            let newM = window.state.calMonth + offset; let newY = window.state.calYear;
             if (newM > 11) { newM = 0; newY++; } else if (newM < 0) { newM = 11; newY--; }
-            if (newY < 2026 || (newY === 2026 && newM < 5)) return;
-            if (newY > 2030) return;
-            state.calMonth = newM; state.calYear = newY;
+            if (newY < 2026 || (newY === 2026 && newM < 5) || newY > 2030) return;
+            window.state.calMonth = newM; window.state.calYear = newY;
             refreshTab();
         };
+        window.selectDate = (dateStr) => { window.state.selectedDate = dateStr; refreshTab(); };
 
-        window.selectDate = (dateStr) => {
-            state.selectedDate = dateStr;
-            refreshTab();
-        };
-
-        // Toggle Task & Projects
         window.toggleTask = (id) => {
-            state.tasks = state.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
-            refreshTab();
+            window.state.tasks = window.state.tasks.map(t => t.id === id ? { ...t, done: !t.done } : t);
+            window.saveToStorage(); refreshTab();
         };
-
         window.toggleProjectAction = (projectId, actionId) => {
-            state.projects = state.projects.map(p => {
+            window.state.projects = window.state.projects.map(p => {
                 if (p.id === projectId) {
-                    const updatedActions = p.actions.map(a => a.id === actionId ? { ...a, isCompleted: !a.isCompleted } : a);
-                    const total = updatedActions.length;
-                    const completed = updatedActions.filter(a => a.isCompleted).length;
-                    return { ...p, actions: updatedActions, progress: Math.round((completed / total) * 100) };
+                    const updated = p.actions.map(a => a.id === actionId ? { ...a, isCompleted: !a.isCompleted } : a);
+                    const comp = updated.filter(a => a.isCompleted).length;
+                    return { ...p, actions: updated, progress: Math.round((comp / updated.length) * 100) };
                 }
                 return p;
             });
-            refreshTab();
+            window.saveToStorage(); refreshTab();
         };
-
         window.deleteProjectAction = (projectId, actionId) => {
-            state.projects = state.projects.map(p => {
+            window.state.projects = window.state.projects.map(p => {
                 if (p.id === projectId) {
-                    const updatedActions = p.actions.filter(a => a.id !== actionId);
-                    const total = updatedActions.length;
-                    const completed = updatedActions.filter(a => a.isCompleted).length;
-                    return { ...p, actions: updatedActions, progress: total === 0 ? 0 : Math.round((completed / total) * 100) };
+                    const updated = p.actions.filter(a => a.id !== actionId);
+                    const comp = updated.filter(a => a.isCompleted).length;
+                    return { ...p, actions: updated, progress: updated.length === 0 ? 0 : Math.round((comp / updated.length) * 100) };
                 }
                 return p;
             });
-            refreshTab();
+            window.saveToStorage(); refreshTab();
         };
 
-        // Inline Actions
-        window.setEditingAction = (projectId, actionId, text, date) => {
-            state.editingAction = { projectId, actionId, text, date };
-            refreshTab();
-        };
-        
-        window.cancelInlineEdit = () => {
-            state.editingAction = null;
-            refreshTab();
-        };
-
+        window.setEditingAction = (pId, aId, text, date) => { window.state.editingAction = { projectId: pId, actionId: aId, text, date }; refreshTab(); };
+        window.cancelInlineEdit = () => { window.state.editingAction = null; refreshTab(); };
         window.saveInlineEditAction = () => {
-            const txt = document.getElementById('edit-act-txt').value;
-            const dt = document.getElementById('edit-act-date').value;
+            const txt = document.getElementById('edit-act-txt').value, dt = document.getElementById('edit-act-date').value;
             if (!txt) return;
-            state.projects = state.projects.map(p => {
-                if (p.id === state.editingAction.projectId) {
-                    const updatedActions = p.actions.map(a => a.id === state.editingAction.actionId ? { ...a, text: txt, date: dt } : a);
-                    return { ...p, actions: updatedActions };
+            window.state.projects = window.state.projects.map(p => {
+                if (p.id === window.state.editingAction.projectId) {
+                    const updated = p.actions.map(a => a.id === window.state.editingAction.actionId ? { ...a, text: txt, date: dt } : a);
+                    return { ...p, actions: updated };
                 }
                 return p;
             });
-            state.editingAction = null;
-            refreshTab();
+            window.state.editingAction = null; window.saveToStorage(); refreshTab();
         };
 
-        window.openNewInlineAction = (projectId) => {
-            state.newInlineAction = { projectId, text: '', date: TODAY };
-            refreshTab();
-        };
-
-        window.cancelNewInlineAction = () => {
-            state.newInlineAction = { projectId: null, text: '', date: TODAY };
-            refreshTab();
-        };
-
-        window.addInlineAction = (projectId) => {
-            const txt = document.getElementById('new-act-txt').value;
-            const dt = document.getElementById('new-act-date').value;
+        window.openNewInlineAction = (pId) => { window.state.newInlineAction = { projectId: pId, text: '', date: TODAY }; refreshTab(); };
+        window.cancelNewInlineAction = () => { window.state.newInlineAction = { projectId: null, text: '', date: TODAY }; refreshTab(); };
+        window.addInlineAction = (pId) => {
+            const txt = document.getElementById('new-act-txt').value, dt = document.getElementById('new-act-date').value;
             if (!txt) return;
-            state.projects = state.projects.map(p => {
-                if (p.id === projectId) {
-                    const updatedActions = [...p.actions, { id: Date.now(), text: txt, date: dt, isCompleted: false }];
-                    const total = updatedActions.length;
-                    const completed = updatedActions.filter(a => a.isCompleted).length;
-                    return { ...p, actions: updatedActions, progress: Math.round((completed / total) * 100) };
+            window.state.projects = window.state.projects.map(p => {
+                if (p.id === pId) {
+                    const updated = [...p.actions, { id: Date.now(), text: txt, date: dt, isCompleted: false }];
+                    const comp = updated.filter(a => a.isCompleted).length;
+                    return { ...p, actions: updated, progress: Math.round((comp / updated.length) * 100) };
                 }
                 return p;
             });
-            state.newInlineAction = { projectId: null, text: '', date: TODAY };
-            refreshTab();
+            window.state.newInlineAction = { projectId: null, text: '', date: TODAY }; window.saveToStorage(); refreshTab();
         };
 
-        // Category Management
-        window.setNewCategoryColor = (color) => {
-            state.newCategoryColor = color;
-            renderModals();
-        };
-
+        window.setNewCategoryColor = (color) => { window.state.newCategoryColor = color; renderModals(); };
         window.addNewCategory = () => {
             const input = document.getElementById('new-cat-input').value;
-            if (input.trim() && !state.categories.find(c => c.name === input.trim())) {
-                state.categories.push({ name: input.trim(), color: state.newCategoryColor });
-                state.projectForm.category = input.trim();
-                renderModals();
+            if (input.trim() && !window.state.categories.find(c => c.name === input.trim())) {
+                window.state.categories.push({ name: input.trim(), color: window.state.newCategoryColor });
+                window.state.projectForm.category = input.trim();
+                window.saveToStorage(); renderModals();
             }
         };
 
-        // Task Modal Management
-        window.openTaskModal = () => { state.isTaskModalOpen = true; renderModals(); };
-        window.closeTaskModal = () => { state.isTaskModalOpen = false; renderModals(); };
-        
-        window.updateTaskFormProj = (val) => {
-            state.taskForm.projectId = val;
-            renderModals();
-        };
-
-        window.toggleTaskFormAllDay = (checked) => {
-            state.taskForm.isAllDay = checked;
-            if(checked) state.taskForm.time = '';
-            renderModals();
-        };
-
+        // Task Modals
+        window.openTaskModal = () => { window.state.isTaskModalOpen = true; renderModals(); };
+        window.closeTaskModal = () => { window.state.isTaskModalOpen = false; renderModals(); };
+        window.updateTaskFormProj = (val) => { window.state.taskForm.projectId = val; renderModals(); };
+        window.toggleTaskFormAllDay = (checked) => { window.state.taskForm.isAllDay = checked; if(checked) window.state.taskForm.time = ''; renderModals(); };
         window.saveTask = () => {
             const title = document.getElementById('tf-title').value;
             if (!title) return;
-
-            const date = document.getElementById('tf-date').value;
-            const endDate = document.getElementById('tf-end').value;
-            const isAllDay = document.getElementById('tf-allday').checked;
-            const time = isAllDay ? '' : (document.getElementById('tf-time') ? document.getElementById('tf-time').value : '');
-            const projId = document.getElementById('tf-proj').value;
-            const cat = projId ? '' : document.getElementById('tf-cat').value;
+            const date = document.getElementById('tf-date').value, endDate = document.getElementById('tf-end').value;
+            const isAllDay = document.getElementById('tf-allday').checked, time = isAllDay ? '' : (document.getElementById('tf-time') ? document.getElementById('tf-time').value : '');
+            const projId = document.getElementById('tf-proj').value, cat = projId ? '' : document.getElementById('tf-cat').value;
 
             if (projId) {
-                state.projects = state.projects.map(p => {
+                window.state.projects = window.state.projects.map(p => {
                     if (p.id === parseInt(projId)) {
-                        const newAct = { id: Date.now(), text: title, date: date, isCompleted: false };
-                        const updated = [...p.actions, newAct];
-                        const completed = updated.filter(a => a.isCompleted).length;
-                        return { ...p, actions: updated, progress: Math.round((completed / updated.length) * 100) };
+                        const updated = [...p.actions, { id: Date.now(), text: title, date: date, isCompleted: false }];
+                        const comp = updated.filter(a => a.isCompleted).length;
+                        return { ...p, actions: updated, progress: Math.round((comp / updated.length) * 100) };
                     }
                     return p;
                 });
-            } else {
-                state.tasks.push({ id: Date.now(), title, date, endDate, time, isAllDay, details: '', category: cat, done: false });
-            }
+            } else window.state.tasks.push({ id: Date.now(), title, date, endDate, time, isAllDay, details: '', category: cat, done: false });
 
-            state.taskForm = { title: '', date: TODAY, endDate: '', time: '', isAllDay: false, details: '', category: '', projectId: '' };
-            state.isTaskModalOpen = false;
-            renderModals();
-            refreshTab();
+            window.state.taskForm = { title: '', date: TODAY, endDate: '', time: '', isAllDay: false, details: '', category: '', projectId: '' };
+            window.state.isTaskModalOpen = false; window.saveToStorage(); renderModals(); refreshTab();
         };
 
-        // Project Modal Management
+        // Project Modals
         window.openNewProject = () => {
-            state.projectForm = { id: null, title: '', startDate: TODAY, endDate: '', category: '', actions: [{ id: Date.now(), text: '', date: TODAY, isCompleted: false }] };
-            state.isEditingProject = false;
-            state.isProjectModalOpen = true;
-            renderModals();
+            window.state.projectForm = { id: null, title: '', startDate: TODAY, endDate: '', category: '', actions: [{ id: Date.now(), text: '', date: TODAY, isCompleted: false }] };
+            window.state.isEditingProject = false; window.state.isProjectModalOpen = true; renderModals();
         };
-
         window.openEditProject = (id) => {
-            const proj = state.projects.find(p => p.id === id);
-            // Deep copy to prevent direct mutation
-            state.projectForm = JSON.parse(JSON.stringify(proj));
-            state.isEditingProject = true;
-            state.isProjectModalOpen = true;
-            renderModals();
+            window.state.projectForm = JSON.parse(JSON.stringify(window.state.projects.find(p => p.id === id)));
+            window.state.isEditingProject = true; window.state.isProjectModalOpen = true; renderModals();
         };
-
-        window.closeProjectModal = () => {
-            state.isProjectModalOpen = false;
-            state.isEditingProject = false;
-            renderModals();
-        };
-
+        window.closeProjectModal = () => { window.state.isProjectModalOpen = false; window.state.isEditingProject = false; renderModals(); };
         window.syncProjectFormDOM = () => {
-            // Get current values from DOM to state before re-rendering modal
-            state.projectForm.title = document.getElementById('pf-title').value;
-            state.projectForm.startDate = document.getElementById('pf-start').value;
-            state.projectForm.endDate = document.getElementById('pf-end').value;
-            state.projectForm.category = document.getElementById('pf-cat').value;
-            state.newCategoryInput = document.getElementById('new-cat-input').value;
-            
-            state.projectForm.actions.forEach(act => {
-                const txtEl = document.getElementById(`pf-act-txt-${act.id}`);
-                const dateEl = document.getElementById(`pf-act-date-${act.id}`);
-                if (txtEl) act.text = txtEl.value;
-                if (dateEl) act.date = dateEl.value;
+            window.state.projectForm.title = document.getElementById('pf-title').value;
+            window.state.projectForm.startDate = document.getElementById('pf-start').value;
+            window.state.projectForm.endDate = document.getElementById('pf-end').value;
+            window.state.projectForm.category = document.getElementById('pf-cat').value;
+            window.state.newCategoryInput = document.getElementById('new-cat-input').value;
+            window.state.projectForm.actions.forEach(act => {
+                const txtEl = document.getElementById(`pf-act-txt-${act.id}`), dateEl = document.getElementById(`pf-act-date-${act.id}`);
+                if (txtEl) act.text = txtEl.value; if (dateEl) act.date = dateEl.value;
             });
         };
-
-        window.addProjectFormAction = () => {
-            syncProjectFormDOM();
-            state.projectForm.actions.push({ id: Date.now(), text: '', date: TODAY, isCompleted: false });
-            renderModals();
-        };
-
-        window.removeProjectFormAction = (id) => {
-            syncProjectFormDOM();
-            state.projectForm.actions = state.projectForm.actions.filter(a => a.id !== id);
-            renderModals();
-        };
-
+        window.addProjectFormAction = () => { window.syncProjectFormDOM(); window.state.projectForm.actions.push({ id: Date.now(), text: '', date: TODAY, isCompleted: false }); renderModals(); };
+        window.removeProjectFormAction = (id) => { window.syncProjectFormDOM(); window.state.projectForm.actions = window.state.projectForm.actions.filter(a => a.id !== id); renderModals(); };
         window.saveProject = () => {
-            syncProjectFormDOM();
-            if (!state.projectForm.title) return;
-
-            const total = state.projectForm.actions.length;
-            const comp = state.projectForm.actions.filter(a => a.isCompleted).length;
+            window.syncProjectFormDOM();
+            if (!window.state.projectForm.title) return;
+            const total = window.state.projectForm.actions.length, comp = window.state.projectForm.actions.filter(a => a.isCompleted).length;
             const progress = total === 0 ? 0 : Math.round((comp / total) * 100);
 
-            if (state.isEditingProject) {
-                state.projects = state.projects.map(p => p.id === state.projectForm.id ? { ...state.projectForm, progress } : p);
-            } else {
-                state.projects.push({ ...state.projectForm, id: Date.now(), progress });
-            }
+            if (window.state.isEditingProject) window.state.projects = window.state.projects.map(p => p.id === window.state.projectForm.id ? { ...window.state.projectForm, progress } : p);
+            else window.state.projects.push({ ...window.state.projectForm, id: Date.now(), progress });
 
-            state.isProjectModalOpen = false;
-            state.isEditingProject = false;
-            renderModals();
-            refreshTab();
+            window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.saveToStorage(); renderModals(); refreshTab();
         };
 
-        // --- INITIALIZE APP ---
+        // ==========================================
+        // 8. INITIALIZE APP
+        // ==========================================
+        loadFromStorage();
         renderApp();
 
     </script>
