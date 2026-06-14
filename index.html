@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Tracker Dashboard</title>
+    <title>nytask! Dashboard</title>
+    <!-- Favicon (Icon Tab Browser) -->
+    <link rel="icon" type="image/png" href="logo.png">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Lucide Icons -->
@@ -21,11 +23,35 @@
     <!-- Loading Screen -->
     <div id="loading-screen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center gap-4">
         <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-[#285c54]"></i>
-        <p class="font-bold text-gray-500 tracking-wide animate-pulse">Syncing with Cloud Database...</p>
+        <p class="font-bold text-gray-500 tracking-wide animate-pulse" id="loading-text">Checking Authentication...</p>
+    </div>
+
+        <!-- Login Screen -->
+    <div id="login-screen" class="fixed inset-0 bg-slate-50 z-[90] hidden flex-col items-center justify-center p-6 text-center">
+        <div class="bg-white p-8 lg:p-10 rounded-3xl shadow-xl max-w-md w-full flex flex-col items-center">
+            
+            <!-- Logo nytask! -->
+            <div class="h-12 lg:h-14 mb-6 flex items-center justify-center">
+                <img src="logo.png" alt="nytask!" class="h-full object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-4xl lg:text-5xl tracking-tight text-[#285c54]&quot;>nytask!</span>'">
+            </div>
+
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome to nytask!</h1>
+            <p class="text-sm text-gray-500 mb-8">Sign in to sync your tasks, projects, and agendas across all your devices.</p>
+            
+            <button onclick="window.loginWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 font-bold py-3.5 px-4 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition shadow-sm">
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
+            </button>
+        </div>
     </div>
 
     <!-- Main App Wrapper -->
-    <div id="app" class="flex flex-col lg:flex-row h-screen w-full relative"></div>
+    <div id="app" class="hidden flex-col lg:flex-row h-screen w-full relative z-10"></div>
     
     <!-- Footer Watermark -->
     <div class="fixed bottom-2 right-4 text-[10px] text-gray-400 z-50 pointer-events-none tracking-widest font-medium">
@@ -38,6 +64,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // ==========================================
         // 0. FIREBASE CONFIGURATION
@@ -53,7 +80,8 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const docRef = doc(db, 'trackerData', 'mainUser');
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
 
         // ==========================================
         // 1. CONSTANTS & DEVICE TIME
@@ -101,12 +129,12 @@
         // 2. STATE MANAGEMENT 
         // ==========================================
         window.state = {
+            currentUser: null,
             activeTab: 'Dashboard', 
             userName: 'Netalen', 
             theme: THEMES[0], 
             
-            // Dashboard UI States
-            dashboardViewMode: 'all', // 'all' or 'high'
+            dashboardViewMode: 'all', 
             showMonthSummary: false,
             
             tasks: [], 
@@ -121,49 +149,89 @@
             newCategoryColor: TAILWIND_COLORS[0],
         };
 
-        let isFirstLoad = true;
+        let unsubscribeSnapshot = null;
 
-        onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                window.state.userName = data.userName || window.state.userName;
-                window.state.theme = THEMES.find(t=>t.id === data.themeId) || window.state.theme;
-                window.state.tasks = data.tasks || [];
-                window.state.projects = data.projects || [];
-                
-                // Add default collapse state if missing
-                window.state.projects.forEach(p => { if(typeof p.isCollapsed === 'undefined') p.isCollapsed = false; });
-            }
-            
-            if (isFirstLoad) {
-                document.getElementById('loading-screen').style.display = 'none';
-                isFirstLoad = false;
-                window.renderApp();
+        // AUTHENTICATION LISTENER
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.state.currentUser = user;
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app').style.display = 'flex';
+                document.getElementById('loading-text').innerText = 'Syncing your data...';
+                document.getElementById('loading-screen').style.display = 'flex';
+
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'tasktracker';
+                const docRef = doc(db, 'artifacts', appId, 'users', user.uid);
+
+                if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+                unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        window.state.userName = data.userName || user.displayName || 'User';
+                        window.state.theme = THEMES.find(t=>t.id === data.themeId) || THEMES[0];
+                        window.state.tasks = data.tasks || [];
+                        window.state.projects = data.projects || [];
+                        
+                        window.state.projects.forEach(p => { if(typeof p.isCollapsed === 'undefined') p.isCollapsed = false; });
+                    } else {
+                        window.state.userName = user.displayName || 'User';
+                        window.state.tasks = [];
+                        window.state.projects = [];
+                    }
+                    
+                    document.getElementById('loading-screen').style.display = 'none';
+                    window.renderApp();
+                    window.refreshTab();
+                }, (err) => {
+                    console.error("Firebase Sync Error:", err);
+                    alert("Error syncing data. Check your Firestore Rules.");
+                    document.getElementById('loading-screen').style.display = 'none';
+                });
+
+                window.saveToStorage = async function() {
+                    if(!window.state.currentUser) return;
+                    const dataToSave = {
+                        userName: window.state.userName,
+                        themeId: window.state.theme.id,
+                        tasks: window.state.tasks,
+                        projects: window.state.projects
+                    };
+                    try { await setDoc(docRef, dataToSave); } catch(e) { console.error("Save failed:", e); }
+                };
+
             } else {
-                window.refreshTab();
-            }
-        }, (err) => {
-            console.error("Firebase Sync Error:", err);
-            if(isFirstLoad) {
+                window.state.currentUser = null;
+                if (unsubscribeSnapshot) unsubscribeSnapshot();
                 document.getElementById('loading-screen').style.display = 'none';
-                window.renderApp();
+                document.getElementById('app').style.display = 'none';
+                document.getElementById('login-screen').style.display = 'flex';
+                document.getElementById('app').innerHTML = '';
             }
         });
 
-        window.saveToStorage = async function() {
-            const dataToSave = {
-                userName: window.state.userName,
-                themeId: window.state.theme.id,
-                tasks: window.state.tasks,
-                projects: window.state.projects
-            };
-            try { await setDoc(docRef, dataToSave); } catch(e) { console.error("Save failed:", e); }
+        // LOGIN / LOGOUT FUNCTIONS
+        window.loginWithGoogle = () => {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('loading-text').innerText = 'Signing in...';
+            document.getElementById('loading-screen').style.display = 'flex';
+            signInWithPopup(auth, provider).catch(error => {
+                console.error("Login failed", error);
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('login-screen').style.display = 'flex';
+                alert("Failed to login: " + error.message);
+            });
+        };
+
+        window.logout = () => {
+            signOut(auth).catch(error => console.error("Logout error", error));
         };
 
         // ==========================================
         // 3. CORE RENDERING ENGINE
         // ==========================================
         window.renderApp = function() {
+            if(!window.state.currentUser) return;
             document.getElementById('app').innerHTML = `
                 ${renderMobileHeader()}
                 ${renderDesktopSidebar()}
@@ -174,6 +242,7 @@
         };
 
         window.refreshTab = function() {
+            if(!window.state.currentUser) return;
             const content = document.getElementById('tab-content');
             if (content) {
                 if (window.state.activeTab === 'Dashboard') content.innerHTML = viewDashboard();
@@ -200,14 +269,12 @@
             return `
             <header class="lg:hidden ${window.state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
                 <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full border-2 border-white/20 bg-black/20 flex items-center justify-center">
-                        <span class="font-bold text-lg uppercase">${window.state.userName.charAt(0)}</span>
-                    </div>
+                    <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-10 h-10 rounded-full border-2 border-white/20 bg-black/20 object-cover">
                     <div>
-                        <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-1">
-                            <i data-lucide="check-square" class="w-4 h-4 opacity-80"></i> Tracker
-                        </h1>
-                        <p class="text-[10px] ${window.state.theme.accentText}">Hello, ${window.state.userName}</p>
+                        <div class="flex items-center gap-1.5 h-5">
+                            <img src="logo.png" alt="nytask!" class="h-4 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-sm tracking-tight&quot;>nytask!</span>'">
+                        </div>
+                        <p class="text-[10px] mt-0.5 ${window.state.theme.accentText}">Hello, ${window.state.userName}</p>
                     </div>
                 </div>
             </header>`;
@@ -223,13 +290,11 @@
             return `
             <aside class="hidden lg:flex w-64 ${window.state.theme.mainBg} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
                 <div class="p-8 pb-4">
-                    <div class="flex items-center gap-2 mb-10 font-bold text-xl tracking-wide">
-                        <i data-lucide="check-square" class="w-6 h-6 ${window.state.theme.accentText}"></i> Tracker
+                    <div class="flex items-center gap-3 mb-10 h-8">
+                        <img src="logo.png" alt="nytask!" class="h-7 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-2xl tracking-tight&quot;>nytask!</span>'">
                     </div>
                     <div class="flex flex-col items-center mb-6">
-                        <div class="w-20 h-20 rounded-full border-4 border-white/20 bg-black/20 flex items-center justify-center mb-4 shadow-lg">
-                            <span class="text-3xl font-bold uppercase">${window.state.userName.charAt(0)}</span>
-                        </div>
+                        <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white/20 bg-black/20 object-cover mb-4 shadow-lg">
                         <h2 class="font-semibold text-lg">${window.state.userName}</h2>
                     </div>
                 </div>
@@ -343,7 +408,7 @@
                         <div class="pl-2 w-full flex justify-between items-end">
                              <div class="text-[10px] lg:text-xs text-gray-500 font-medium">
                                 ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> Project: ${item.projectTitle}</span>` : ''}
-                                ${!item.isProjectAction && item.category ? `<span class="flex items-center gap-1"><i data-lucide="tag" class="w-3 h-3"></i> Category: ${item.category}</span>` : ''}
+                                ${!item.isProjectAction && item.category && item.category !== 'General' ? `<span class="flex items-center gap-1"><i data-lucide="tag" class="w-3 h-3"></i> Category: ${item.category}</span>` : ''}
                                 <span class="flex items-center gap-1 mt-0.5"><i data-lucide="calendar" class="w-3 h-3"></i> Date: ${item.date} ${item.time && !item.isAllDay ? `| ${item.time}` : ''}</span>
                              </div>
                              <span class="text-[10px] font-bold px-2 py-1 rounded ${isDone ? 'bg-green-100 text-green-700' : (item.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600')}">${item.status}</span>
@@ -430,7 +495,8 @@
                 const activeProjects = window.state.projects.filter(p => dateStr >= p.startDate && (!p.endDate || dateStr <= p.endDate));
 
                 let projBlocks = activeProjects.map(p => {
-                    return `<div class="${p.color} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
+                    const color = p.color || 'bg-gray-500';
+                    return `<div class="${color} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
                 }).join('');
 
                 let taskDots = dayTasks.map(t => {
@@ -482,12 +548,11 @@
                                 ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> ${item.projectTitle}</span>` : ''}
                             </div>
                         </div>
-                        <select onchange="window.updateItemStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction}, this.value)" class="text-xs font-bold px-2 py-1.5 rounded outline-none border focus:ring-1 focus:ring-gray-300 cursor-pointer ${isDone ? 'bg-green-100 text-green-700 border-green-200' : (item.status==='In Progress' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200')}">
+                        <select onchange="window.updateItemStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction}, this.value)" class="text-[10px] lg:text-xs font-bold px-2 py-1.5 rounded outline-none border focus:ring-1 focus:ring-gray-300 cursor-pointer ${isDone ? 'bg-green-100 text-green-700 border-green-200' : (item.status==='In Progress' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200')}">
                             ${selectOptions}
                         </select>
                     </div>`;
                 }).join('');
-
 
             return `
             <div class="flex flex-col gap-6 lg:gap-8 h-full">
@@ -634,8 +699,18 @@
                     <p class="text-gray-500 text-xs lg:text-sm">Manage your profile and dashboard settings.</p>
                 </div>
                 <div class="p-6 lg:p-8 space-y-8 lg:space-y-10">
+                    
+                    <div class="flex flex-col sm:flex-row items-center gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                        <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white shadow-sm object-cover">
+                        <div class="flex-1 text-center sm:text-left">
+                            <h3 class="font-bold text-lg text-gray-800">${window.state.currentUser?.displayName || 'User'}</h3>
+                            <p class="text-sm text-gray-500 mb-3">${window.state.currentUser?.email || 'No email'}</p>
+                            <button onclick="window.logout()" class="px-4 py-2 bg-white border border-gray-200 text-red-600 font-bold rounded-lg text-sm hover:bg-red-50 transition shadow-sm">Sign Out</button>
+                        </div>
+                    </div>
+
                     <div>
-                        <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4"></i> Display Name</label>
+                        <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4"></i> Custom Display Name</label>
                         <div class="flex flex-col sm:flex-row gap-3">
                             <input type="text" id="settings-username" value="${window.state.userName}" class="w-full md:w-1/2 border border-gray-200 rounded-xl px-4 py-2 lg:py-3 focus:outline-none focus:ring-2 focus:ring-gray-200 text-base lg:text-lg font-medium" />
                             <button onclick="window.saveSettingsName()" class="${window.state.theme.mainBg} text-white px-6 py-2 lg:py-3 rounded-xl font-bold ${window.state.theme.hoverBg} transition">Save Name</button>
@@ -750,7 +825,7 @@
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
                 <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project' : 'Create New Project'}</h3>
+                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project Settings' : 'Create New Project'}</h3>
                         <button onclick="window.closeProjectModal()" class="text-gray-400 hover:bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="overflow-y-auto p-4 lg:p-6 scrollbar-hide flex-1 space-y-4 lg:space-y-6">
@@ -778,7 +853,7 @@
                     <div class="p-4 lg:p-6 border-t border-gray-100 bg-white flex flex-shrink-0 gap-3">
                         ${window.state.isEditingProject ? `<button onclick="window.deleteProject()" class="p-3 lg:p-3.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition" title="Delete Project"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
                         <button onclick="window.saveProject()" class="flex-1 ${window.state.theme.mainBg} text-white font-bold py-2.5 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition text-sm lg:text-base">
-                            ${window.state.isEditingProject ? 'Save Project' : 'Create Project'}
+                            ${window.state.isEditingProject ? 'Save Project Settings' : 'Create Project'}
                         </button>
                     </div>
                 </div>
