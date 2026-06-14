@@ -9,18 +9,21 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        /* Hide scrollbar for clean UI */
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Safe padding for mobile devices */
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
-        /* Kanban card grab cursor */
         .kanban-card { cursor: grab; }
         .kanban-card:active { cursor: grabbing; }
     </style>
 </head>
 <body class="bg-slate-50 font-sans overflow-hidden text-gray-800">
     
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center gap-4">
+        <i data-lucide="loader-2" class="w-10 h-10 animate-spin text-[#285c54]"></i>
+        <p class="font-bold text-gray-500 tracking-wide animate-pulse">Syncing with Cloud Database...</p>
+    </div>
+
     <!-- Main App Wrapper -->
     <div id="app" class="flex flex-col lg:flex-row h-screen w-full relative"></div>
     
@@ -32,21 +35,36 @@
     <!-- Modals Wrapper -->
     <div id="modal-root"></div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         // ==========================================
-        // 1. CONSTANTS & CONFIGURATION
+        // 0. FIREBASE CONFIGURATION
         // ==========================================
-        const TODAY = '2026-06-11'; // Current system date
-        const TAILWIND_COLORS = [
-            'bg-red-500', 'bg-orange-500', 'bg-amber-500', 
-            'bg-green-500', 'bg-teal-500', 'bg-blue-500', 
-            'bg-indigo-500', 'bg-purple-500', 'bg-pink-500'
-        ];
+        const firebaseConfig = {
+            apiKey: "AIzaSyCxhoCNVQFp9gdQ_fxNi7fjq5YcWkhih6I",
+            authDomain: "tasktracker-net.firebaseapp.com",
+            projectId: "tasktracker-net",
+            storageBucket: "tasktracker-net.firebasestorage.app",
+            messagingSenderId: "53658095983",
+            appId: "1:53658095983:web:04ced390c5c14b96bd189a"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const docRef = doc(db, 'trackerData', 'mainUser');
+
+        // ==========================================
+        // 1. CONSTANTS & DEVICE TIME
+        // ==========================================
+        const dateObj = new Date();
+        const TODAY = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
         
+        const TAILWIND_COLORS = ['bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-green-500', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-pink-500'];
         const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const DAYS_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-        // Expanded themes based on color palette
         const THEMES = [
             { id: 'teal', name: 'Teal', mainBg: 'bg-[#285c54]', mainText: 'text-[#285c54]', mainBorder: 'border-[#285c54]', hoverBg: 'hover:bg-[#1e4740]', lightBg: 'bg-[#eef7f5]', accentText: 'text-[#a7d3cb]' },
             { id: 'blue', name: 'Pacific Blue', mainBg: 'bg-[#0096c7]', mainText: 'text-[#0096c7]', mainBorder: 'border-[#0096c7]', hoverBg: 'hover:bg-[#0077b6]', lightBg: 'bg-[#e0f2fe]', accentText: 'text-[#bae6fd]' },
@@ -60,8 +78,8 @@
 
         const TABS = [
             { id: 'Dashboard', name: 'Dashboard', icon: 'home' },
-            { id: 'My Tasks', name: 'My Tasks', icon: 'calendar' },
-            { id: 'Projects', name: 'Projects', icon: 'briefcase' },
+            { id: 'Details', name: 'Details', icon: 'briefcase' },
+            { id: 'Calendar', name: 'Calendar', icon: 'calendar' },
             { id: 'Settings', name: 'Settings', icon: 'settings' }
         ];
 
@@ -72,101 +90,80 @@
             'Low': 'bg-blue-100 text-blue-700 border-blue-200' 
         };
 
-        let monthOptions = [];
-        for(let y = 2026; y <= 2030; y++) {
-            let startM = (y === 2026) ? 5 : 0; 
-            for(let m = startM; m < 12; m++) monthOptions.push({ label: `${MONTH_NAMES[m]} ${y}`, m, y });
-        }
-
-        function formatFullDate(dateStr) {
+        window.formatFullDate = function(dateStr) {
             if (!dateStr) return '';
             const d = new Date(dateStr);
             if (isNaN(d.getTime())) return dateStr;
             return `${DAYS_NAMES[d.getDay()]}, ${d.getDate().toString().padStart(2, '0')} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
-        }
-
-        // ==========================================
-        // 2. STATE MANAGEMENT & LOCAL STORAGE
-        // ==========================================
-        window.state = {
-            activeTab: 'Dashboard',
-            userName: 'Tata',
-            theme: THEMES[0],
-            searchQuery: '',
-            
-            categories: [
-                { name: 'Audit', color: 'bg-purple-500' },
-                { name: 'Content', color: 'bg-orange-500' }
-            ],
-            tasks: [
-                { id: 1, title: 'Review Marketing Copy', category: 'Content', status: 'Done', priority: 'Medium', date: TODAY, time: '10:00', isAllDay: false, details: 'Review all copy for the Q3 campaign.' },
-                { id: 2, title: 'Finalize Budget Report', category: 'Audit', status: 'To Do', priority: 'High', date: '2026-06-15', time: '', isAllDay: true, details: 'Need to submit before Friday.' }
-            ],
-            projects: [
-                {
-                    id: 1, title: 'United Tractors', startDate: '2026-06-06', endDate: '2026-08-06', category: 'Audit', progress: 33,
-                    actions: [
-                        { id: 101, text: 'Compile asset inventory', date: '2026-06-09', priority: 'Low', status: 'Done', details: 'Check all internal assets.' },
-                        { id: 102, text: 'Review visual identity', date: TODAY, priority: 'High', status: 'In Progress', details: 'Meet with design team to review current visual guidelines.' },
-                        { id: 103, text: 'Draft presentation', date: '2026-06-15', priority: 'Medium', status: 'To Do', details: 'Prepare slides for final audit.' }
-                    ]
-                }
-            ],
-            
-            calMonth: 5, calYear: 2026, selectedDate: TODAY,
-            
-            // Unified Task Modal
-            isTaskModalOpen: false,
-            taskModalData: null,
-            
-            // Project Settings Modal
-            isProjectModalOpen: false,
-            projectForm: null,
-            
-            newCategoryInput: '', newCategoryColor: TAILWIND_COLORS[0],
         };
 
-        function loadFromStorage() {
-            try {
-                const saved = localStorage.getItem('taskTrackerData');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    window.state.userName = data.userName || window.state.userName;
-                    window.state.theme = data.theme || window.state.theme;
-                    window.state.categories = data.categories || window.state.categories;
-                    
-                    window.state.tasks = (data.tasks || []).map(t => ({
-                        ...t,
-                        priority: t.priority || 'Medium',
-                        status: t.status || (t.done ? 'Done' : 'To Do'),
-                    }));
-                    window.state.projects = (data.projects || []).map(p => ({
-                        ...p,
-                        actions: (p.actions || []).map(a => ({
-                            ...a,
-                            priority: a.priority || 'Medium',
-                            status: a.status || (a.isCompleted ? 'Done' : 'To Do'),
-                        }))
-                    }));
-                }
-            } catch (e) { console.error("Error loading data:", e); }
-        }
+        // ==========================================
+        // 2. STATE MANAGEMENT 
+        // ==========================================
+        window.state = {
+            activeTab: 'Dashboard', 
+            userName: 'Netalen', 
+            theme: THEMES[0], 
+            
+            // Dashboard UI States
+            dashboardViewMode: 'all', // 'all' or 'high'
+            showMonthSummary: false,
+            
+            tasks: [], 
+            projects: [],
+            
+            calMonth: dateObj.getMonth(), 
+            calYear: dateObj.getFullYear(), 
+            selectedDate: TODAY,
+            
+            isTaskModalOpen: false, taskModalData: null,
+            isProjectModalOpen: false, projectForm: null,
+            newCategoryColor: TAILWIND_COLORS[0],
+        };
 
-        window.saveToStorage = function() {
+        let isFirstLoad = true;
+
+        onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                window.state.userName = data.userName || window.state.userName;
+                window.state.theme = THEMES.find(t=>t.id === data.themeId) || window.state.theme;
+                window.state.tasks = data.tasks || [];
+                window.state.projects = data.projects || [];
+                
+                // Add default collapse state if missing
+                window.state.projects.forEach(p => { if(typeof p.isCollapsed === 'undefined') p.isCollapsed = false; });
+            }
+            
+            if (isFirstLoad) {
+                document.getElementById('loading-screen').style.display = 'none';
+                isFirstLoad = false;
+                window.renderApp();
+            } else {
+                window.refreshTab();
+            }
+        }, (err) => {
+            console.error("Firebase Sync Error:", err);
+            if(isFirstLoad) {
+                document.getElementById('loading-screen').style.display = 'none';
+                window.renderApp();
+            }
+        });
+
+        window.saveToStorage = async function() {
             const dataToSave = {
                 userName: window.state.userName,
-                theme: window.state.theme,
-                categories: window.state.categories,
+                themeId: window.state.theme.id,
                 tasks: window.state.tasks,
                 projects: window.state.projects
             };
-            localStorage.setItem('taskTrackerData', JSON.stringify(dataToSave));
+            try { await setDoc(docRef, dataToSave); } catch(e) { console.error("Save failed:", e); }
         };
 
         // ==========================================
         // 3. CORE RENDERING ENGINE
         // ==========================================
-        function renderApp() {
+        window.renderApp = function() {
             document.getElementById('app').innerHTML = `
                 ${renderMobileHeader()}
                 ${renderDesktopSidebar()}
@@ -174,27 +171,27 @@
                 ${renderMobileNav()}
             `;
             lucide.createIcons();
-        }
+        };
 
-        function refreshTab() {
+        window.refreshTab = function() {
             const content = document.getElementById('tab-content');
             if (content) {
                 if (window.state.activeTab === 'Dashboard') content.innerHTML = viewDashboard();
-                else if (window.state.activeTab === 'My Tasks') content.innerHTML = viewMyTasks();
-                else if (window.state.activeTab === 'Projects') content.innerHTML = viewProjects();
+                else if (window.state.activeTab === 'Calendar') content.innerHTML = viewCalendar();
+                else if (window.state.activeTab === 'Details') content.innerHTML = viewDetails();
                 else if (window.state.activeTab === 'Settings') content.innerHTML = viewSettings();
                 lucide.createIcons();
             }
-        }
+        };
 
-        function renderModals() {
+        window.renderModals = function() {
             const modalRoot = document.getElementById('modal-root');
             let html = '';
             if (window.state.isTaskModalOpen) html += renderUnifiedTaskModal();
             if (window.state.isProjectModalOpen) html += renderProjectSettingsModal();
             modalRoot.innerHTML = html;
             lucide.createIcons();
-        }
+        };
 
         // ==========================================
         // 4. LAYOUT COMPONENTS
@@ -247,50 +244,37 @@
                     <span class="text-[9px] font-bold">${t.name}</span>
                 </button>
             `).join('');
-
-            return `<div class="lg:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40 flex justify-around items-center h-16 pb-safe shadow-lg">${navItems}</div>`;
+            return `<div class="lg:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40 flex justify-around items-center h-16 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">${navItems}</div>`;
         }
 
         function renderMainContent() {
             const title = window.state.activeTab === 'Dashboard' ? `Hello, ${window.state.userName}` : TABS.find(t=>t.id === window.state.activeTab).name;
-            
             return `
             <main class="flex-1 p-4 lg:p-10 pb-28 lg:pb-10 overflow-y-auto scrollbar-hide flex flex-col relative">
                 <!-- Desktop Header -->
-                <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4 flex-shrink-0">
+                <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 flex-shrink-0">
                     <div>
                         <h1 class="text-3xl font-bold tracking-tight">${title}</h1>
-                        <p class="text-gray-500 mt-1">Today is ${formatFullDate(TODAY)}</p>
-                    </div>
-                    <div class="flex items-center gap-4 w-full md:w-auto">
-                        <div class="relative w-full md:w-64">
-                            <i data-lucide="search" class="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                            <input type="text" oninput="window.handleSearch(this.value)" value="${window.state.searchQuery}" placeholder="Search tasks..." class="pl-10 pr-4 py-2.5 bg-white rounded-full text-sm border-none shadow-sm focus:outline-none focus:ring-2 focus:ring-gray-200 w-full" />
-                        </div>
+                        <p class="text-gray-500 mt-1 font-medium">Today is ${window.formatFullDate(TODAY)}</p>
                     </div>
                 </header>
 
                 <!-- Mobile Header -->
-                <div class="lg:hidden mb-4 space-y-4">
-                    <div class="relative">
-                        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                        <input type="text" oninput="window.handleSearch(this.value)" value="${window.state.searchQuery}" placeholder="Search tasks..." class="pl-9 pr-4 py-2 bg-white rounded-full text-xs border border-gray-100 shadow-sm focus:outline-none w-full" />
-                    </div>
+                <div class="lg:hidden mb-4 space-y-2">
                     <div class="flex justify-between items-end">
-                        <h1 class="text-xl font-bold tracking-tight">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
-                        <p class="text-[10px] font-medium text-gray-500">${formatFullDate(TODAY)}</p>
+                        <h1 class="text-2xl font-bold tracking-tight">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
                     </div>
+                    <p class="text-xs font-bold text-gray-500">${window.formatFullDate(TODAY)}</p>
                 </div>
 
-                <!-- Tab Content Router -->
+                <!-- Tab Router -->
                 <div class="flex-1 max-w-6xl w-full mx-auto" id="tab-content">
                     ${window.state.activeTab === 'Dashboard' ? viewDashboard() : ''}
-                    ${window.state.activeTab === 'My Tasks' ? viewMyTasks() : ''}
-                    ${window.state.activeTab === 'Projects' ? viewProjects() : ''}
+                    ${window.state.activeTab === 'Calendar' ? viewCalendar() : ''}
+                    ${window.state.activeTab === 'Details' ? viewDetails() : ''}
                     ${window.state.activeTab === 'Settings' ? viewSettings() : ''}
                 </div>
 
-                <!-- Global Add Task Button -->
                 <button onclick="window.openCreateTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-xl ${window.state.theme.hoverBg} hover:scale-105 transition-all z-30 group" title="Add New Task">
                     <i data-lucide="plus" class="w-6 h-6 lg:w-8 lg:h-8 group-hover:rotate-90 transition-transform duration-300"></i>
                 </button>
@@ -300,173 +284,137 @@
         // ==========================================
         // 5. TAB VIEWS & AGENDAS
         // ==========================================
-        function getSortedAgendaData() {
-            let combined = [];
-            if (window.state.searchQuery.trim() !== '') {
-                const q = window.state.searchQuery.toLowerCase();
-                const mTasks = window.state.tasks.filter(t => t.title.toLowerCase().includes(q) || (t.details && t.details.toLowerCase().includes(q)));
-                const mActions = window.state.projects.flatMap(p => p.actions.filter(a => a.text.toLowerCase().includes(q)).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
-                combined = [...mTasks, ...mActions];
-            } else {
-                const aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
-                const aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
-                combined = [...aTasks, ...aActions];
-            }
-
-            combined.sort((a, b) => {
-                const aDone = a.status === 'Done';
-                const bDone = b.status === 'Done';
-                if (aDone && !bDone) return 1;
-                if (!aDone && bDone) return -1;
-                
-                const pA = PRIORITY_SCORES[a.priority || 'Medium'];
-                const pB = PRIORITY_SCORES[b.priority || 'Medium'];
-                if (pA !== pB) return pB - pA;
-
-                return new Date(a.date) - new Date(b.date);
-            });
-            return combined;
-        }
-
-        function renderAgendaList() {
-            const items = getSortedAgendaData();
-            if (items.length === 0) {
-                return `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">${window.state.searchQuery ? 'No tasks found.' : 'No tasks or actions scheduled.'}</p>`;
-            }
-
-            return items.map((item) => {
-                const isDone = item.status === 'Done';
-                const projCat = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId)?.category : null;
-                const catColorStr = (window.state.categories.find(c => c.name === (projCat || item.category)) || {}).color || 'bg-gray-300';
-                const prioClasses = PRIORITY_COLORS[item.priority || 'Medium'];
-
-                return `
-                <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-start gap-3 lg:gap-4 transition-all relative overflow-hidden bg-white shadow-sm hover:shadow-md cursor-pointer group" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
-                    <div class="absolute left-0 top-0 bottom-0 w-1 ${isDone ? 'bg-gray-200' : catColorStr}"></div>
-                    
-                    <button onclick="event.stopPropagation(); window.toggleTaskStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})" class="flex-shrink-0 text-gray-400 hover:${window.state.theme.mainText} mt-0.5 ml-1 lg:ml-2">
-                        <i data-lucide="${isDone ? 'check-circle-2' : 'circle'}" class="w-5 h-5 lg:w-6 lg:h-6 ${isDone ? window.state.theme.mainText : ''}"></i>
-                    </button>
-                    
-                    <div class="flex-1 overflow-hidden">
-                        <div class="flex justify-between items-start mb-1">
-                            <h4 class="font-bold text-sm lg:text-base truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}">${item.title || item.text}</h4>
-                            <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${item.priority || 'Medium'}</span>
-                        </div>
-                        
-                        ${item.isProjectAction 
-                            ? `<p class="text-[10px] lg:text-xs text-gray-500 font-medium flex items-center gap-1 truncate"><i data-lucide="briefcase" class="w-3 h-3 flex-shrink-0"></i> Project: ${item.projectTitle}</p>`
-                            : `<div class="text-[10px] lg:text-xs text-gray-500 flex gap-3 truncate">
-                                ${item.time && !item.isAllDay ? `<span class="flex items-center gap-1 flex-shrink-0"><i data-lucide="clock" class="w-3 h-3"></i> ${item.time}</span>` : ''}
-                                ${item.category ? `<span class="flex items-center gap-1 truncate"><i data-lucide="tag" class="w-3 h-3 flex-shrink-0"></i> ${item.category}</span>` : ''}
-                               </div>`
-                        }
-                    </div>
-                </div>`;
-            }).join('');
-        }
-
-        function renderHighPriorityList() {
-            const hpTasks = window.state.tasks.filter(t => t.priority === 'High' && t.status !== 'Done');
-            const hpActions = window.state.projects.flatMap(p => 
-                p.actions.filter(a => a.priority === 'High' && a.status !== 'Done')
-                         .map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title}))
-            );
-            let combined = [...hpTasks, ...hpActions];
-            combined.sort((a,b) => new Date(a.date) - new Date(b.date));
-
-            if (combined.length === 0) {
-                return `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">No high priority tasks.</p>`;
-            }
-
-            return combined.map((item) => {
-                const projCat = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId)?.category : null;
-                const catColorStr = (window.state.categories.find(c => c.name === (projCat || item.category)) || {}).color || 'bg-gray-300';
-                const prioClasses = PRIORITY_COLORS['High'];
-
-                return `
-                <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-start gap-3 lg:gap-4 transition-all relative overflow-hidden bg-red-50 border-red-100 shadow-sm hover:shadow-md cursor-pointer group" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
-                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
-                    <button onclick="event.stopPropagation(); window.toggleTaskStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})" class="flex-shrink-0 text-red-400 hover:text-red-600 mt-0.5 ml-1 lg:ml-2">
-                        <i data-lucide="circle" class="w-5 h-5 lg:w-6 lg:h-6"></i>
-                    </button>
-                    <div class="flex-1 overflow-hidden">
-                        <div class="flex justify-between items-start mb-1">
-                            <h4 class="font-bold text-sm lg:text-base truncate text-gray-800">${item.title || item.text}</h4>
-                            <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${prioClasses}">High</span>
-                        </div>
-                        ${item.isProjectAction 
-                            ? `<p class="text-[10px] lg:text-xs text-gray-600 font-medium flex items-center gap-1 truncate"><i data-lucide="briefcase" class="w-3 h-3 flex-shrink-0"></i> Project: ${item.projectTitle}</p>`
-                            : `<div class="text-[10px] lg:text-xs text-gray-600 flex gap-3 truncate">
-                                <span class="flex items-center gap-1 flex-shrink-0"><i data-lucide="calendar" class="w-3 h-3"></i> ${formatFullDate(item.date)}</span>
-                                ${item.time && !item.isAllDay ? `<span class="flex items-center gap-1 flex-shrink-0"><i data-lucide="clock" class="w-3 h-3"></i> ${item.time}</span>` : ''}
-                               </div>`
-                        }
-                    </div>
-                </div>`;
-            }).join('');
-        }
 
         function viewDashboard() {
-            let sumComp = 0, sumToDo = 0;
-            window.state.tasks.forEach(t => { const d = new Date(t.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { t.status === 'Done' ? sumComp++ : sumToDo++; }});
-            window.state.projects.forEach(p => { p.actions.forEach(a => { const d = new Date(a.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { a.status === 'Done' ? sumComp++ : sumToDo++; }});});
+            // Calculate Today's Stats
+            const todaysTasks = window.state.tasks.filter(t => t.date === TODAY);
+            const todaysActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === TODAY));
+            const allToday = [...todaysTasks, ...todaysActions];
             
-            const sumActiveProjects = window.state.projects.filter(p => {
+            const todayDone = allToday.filter(i => i.status === 'Done').length;
+            const todayNotDone = allToday.length - todayDone;
+            const todayTotal = allToday.length;
+
+            // Calculate Month's Stats
+            let monthComp = 0, monthToDo = 0;
+            window.state.tasks.forEach(t => { const d = new Date(t.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { t.status === 'Done' ? monthComp++ : monthToDo++; }});
+            window.state.projects.forEach(p => { p.actions.forEach(a => { const d = new Date(a.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { a.status === 'Done' ? monthComp++ : monthToDo++; }});});
+            
+            const monthActiveProjects = window.state.projects.filter(p => {
                 const start = new Date(p.startDate), end = p.endDate ? new Date(p.endDate) : new Date(2099, 11, 31);
                 const filterStart = new Date(window.state.calYear, window.state.calMonth, 1), filterEnd = new Date(window.state.calYear, window.state.calMonth + 1, 0);
                 return start <= filterEnd && end >= filterStart;
             }).length;
 
-            const optsHTML = monthOptions.map(opt => `<option value="${opt.m}-${opt.y}" ${opt.m === window.state.calMonth && opt.y === window.state.calYear ? 'selected' : ''}>${opt.label}</option>`).join('');
+            // Date Dropdowns
+            let years = []; for(let i=2026; i<=2030; i++) years.push(i);
+            const monthOpts = MONTH_NAMES.map((m, idx) => `<option value="${idx}" ${idx === window.state.calMonth ? 'selected' : ''}>${m}</option>`).join('');
+            const yearOpts = years.map(y => `<option value="${y}" ${y === window.state.calYear ? 'selected' : ''}>${y}</option>`).join('');
+
+            // Tasks List Display Logic (Pure Overview, no checklist)
+            let displayList = [];
+            if (window.state.dashboardViewMode === 'all') {
+                const aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
+                const aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+                displayList = [...aTasks, ...aActions];
+            } else {
+                const hpTasks = window.state.tasks.filter(t => t.priority === 'High' && t.status !== 'Done');
+                const hpActions = window.state.projects.flatMap(p => p.actions.filter(a => a.priority === 'High' && a.status !== 'Done').map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+                displayList = [...hpTasks, ...hpActions];
+            }
+
+            displayList.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const listHTML = displayList.length === 0 
+                ? `<p class="text-sm text-gray-500 italic p-4 text-center border border-dashed rounded-xl">No tasks found for this view.</p>`
+                : displayList.map(item => {
+                    const isDone = item.status === 'Done';
+                    const proj = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId) : window.state.projects.find(p=>p.title === item.category);
+                    const catColorStr = proj ? proj.color : 'bg-gray-300';
+                    const prioClasses = PRIORITY_COLORS[item.priority || 'Medium'];
+                    
+                    return `
+                    <div class="p-3 lg:p-4 rounded-xl border flex flex-col gap-2 transition-all relative overflow-hidden bg-white shadow-sm hover:shadow-md cursor-pointer" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
+                        <div class="absolute left-0 top-0 bottom-0 w-1 ${isDone ? 'bg-gray-200' : catColorStr}"></div>
+                        <div class="flex justify-between items-start w-full pl-2">
+                            <h4 class="font-bold text-sm lg:text-base ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}">${item.title || item.text}</h4>
+                            <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${item.priority || 'Medium'}</span>
+                        </div>
+                        <div class="pl-2 w-full flex justify-between items-end">
+                             <div class="text-[10px] lg:text-xs text-gray-500 font-medium">
+                                ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> Project: ${item.projectTitle}</span>` : ''}
+                                ${!item.isProjectAction && item.category ? `<span class="flex items-center gap-1"><i data-lucide="tag" class="w-3 h-3"></i> Category: ${item.category}</span>` : ''}
+                                <span class="flex items-center gap-1 mt-0.5"><i data-lucide="calendar" class="w-3 h-3"></i> Date: ${item.date} ${item.time && !item.isAllDay ? `| ${item.time}` : ''}</span>
+                             </div>
+                             <span class="text-[10px] font-bold px-2 py-1 rounded ${isDone ? 'bg-green-100 text-green-700' : (item.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600')}">${item.status}</span>
+                        </div>
+                    </div>`;
+                }).join('');
 
             return `
-            <div class="space-y-6 lg:space-y-8">
+            <div class="space-y-6 lg:space-y-8 pb-10">
+                <!-- TODAY OVERVIEW -->
                 <section>
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg lg:text-xl font-bold">Task Summary</h2>
-                        <div class="relative">
-                            <select onchange="window.changeSummaryMonth(this.value)" class="appearance-none bg-white border border-gray-200 text-gray-700 py-2 pl-3 pr-8 rounded-xl focus:outline-none focus:ring-1 focus:ring-gray-300 text-xs lg:text-sm font-medium shadow-sm cursor-pointer">${optsHTML}</select>
-                            <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500 absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none"></i>
+                    <h2 class="text-xl lg:text-2xl font-bold mb-4 flex items-center gap-2">Today's Overview</h2>
+                    <div class="grid grid-cols-3 gap-3 lg:gap-6">
+                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+                            <span class="text-3xl lg:text-5xl font-bold text-gray-800 mb-1">${todayTotal}</span>
+                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">Total Tasks</span>
+                        </div>
+                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+                            <span class="text-3xl lg:text-5xl font-bold ${window.state.theme.mainText} mb-1">${todayDone}</span>
+                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">Done</span>
+                        </div>
+                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center border-b-4 border-b-orange-400">
+                            <span class="text-3xl lg:text-5xl font-bold text-orange-500 mb-1">${todayNotDone}</span>
+                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">To Do</span>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 lg:gap-4">
-                        <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumComp}</span>
-                            <span class="text-xs lg:text-sm font-medium text-gray-600">Completed</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[window.state.calMonth]}</span>
+                </section>
+
+                <!-- MONTH OVERVIEW (COLLAPSIBLE) -->
+                <section class="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 p-4 lg:p-6 transition-all">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="flex items-center gap-2 cursor-pointer" onclick="window.toggleMonthSummary()">
+                            <h2 class="text-base lg:text-lg font-bold text-gray-700">Month Overview</h2>
+                            <i data-lucide="${window.state.showMonthSummary ? 'chevron-up' : 'chevron-down'}" class="w-5 h-5 text-gray-400"></i>
                         </div>
-                        <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center">
-                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumToDo}</span>
-                            <span class="text-xs lg:text-sm font-medium text-gray-600">To Do / Pending</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">In ${MONTH_NAMES[window.state.calMonth]}</span>
+                        <div class="flex gap-2 ${window.state.showMonthSummary ? '' : 'hidden'}">
+                            <select onchange="window.changeSummaryDate('month', this.value)" class="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:border-gray-400 text-xs font-medium cursor-pointer">${monthOpts}</select>
+                            <select onchange="window.changeSummaryDate('year', this.value)" class="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:border-gray-400 text-xs font-medium cursor-pointer">${yearOpts}</select>
                         </div>
-                        <div class="bg-white p-4 lg:p-5 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center col-span-2 sm:col-span-1">
-                            <span class="text-2xl lg:text-3xl font-bold mb-1">${sumActiveProjects}</span>
-                            <span class="text-xs lg:text-sm font-medium text-gray-600">Projects</span>
-                            <span class="text-[10px] lg:text-xs text-gray-400 mt-1">Active in ${MONTH_NAMES[window.state.calMonth]}</span>
+                    </div>
+                    
+                    <div class="grid-cols-3 gap-3 lg:gap-4 mt-4 ${window.state.showMonthSummary ? 'grid' : 'hidden'}">
+                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthComp}</span>
+                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Completed</span>
+                        </div>
+                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthToDo}</span>
+                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Pending</span>
+                        </div>
+                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthActiveProjects}</span>
+                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Active Projects</span>
                         </div>
                     </div>
                 </section>
                 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
-                    <section>
-                        <h2 class="text-lg lg:text-xl font-bold mb-4">${window.state.searchQuery ? 'Search Results' : `Tasks for ${formatFullDate(window.state.selectedDate)}`}</h2>
-                        <div class="space-y-3 lg:space-y-4" id="agenda-list-container">
-                            ${renderAgendaList()}
-                        </div>
-                    </section>
-                    <section>
-                        <h2 class="text-lg lg:text-xl font-bold mb-4 flex items-center gap-2"><i data-lucide="flame" class="w-5 h-5 text-red-500"></i> High Priority Tasks</h2>
-                        <div class="space-y-3 lg:space-y-4">
-                            ${renderHighPriorityList()}
-                        </div>
-                    </section>
-                </div>
+                <!-- TASK LIST OVERVIEW -->
+                <section>
+                    <div class="flex items-center gap-2 mb-4 border-b border-gray-200">
+                        <button onclick="window.setDashboardView('all')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 ${window.state.dashboardViewMode === 'all' ? `${window.state.theme.mainBorder} ${window.state.theme.mainText}` : 'border-transparent text-gray-400 hover:text-gray-600'}">All Tasks (${window.state.selectedDate})</button>
+                        <button onclick="window.setDashboardView('high')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 flex items-center gap-1 ${window.state.dashboardViewMode === 'high' ? `border-red-500 text-red-600` : 'border-transparent text-gray-400 hover:text-gray-600'}"><i data-lucide="flame" class="w-4 h-4"></i> High Priority</button>
+                    </div>
+                    <div class="space-y-3 lg:space-y-4">
+                        ${listHTML}
+                    </div>
+                </section>
             </div>`;
         }
 
-        function viewMyTasks() {
+        function viewCalendar() {
             const daysInMonth = new Date(window.state.calYear, window.state.calMonth + 1, 0).getDate();
             const startDay = new Date(window.state.calYear, window.state.calMonth, 1).getDay();
             
@@ -482,12 +430,12 @@
                 const activeProjects = window.state.projects.filter(p => dateStr >= p.startDate && (!p.endDate || dateStr <= p.endDate));
 
                 let projBlocks = activeProjects.map(p => {
-                    const color = (window.state.categories.find(c => c.name === p.category) || {}).color || 'bg-gray-500';
-                    return `<div class="${color} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
+                    return `<div class="${p.color} text-transparent sm:text-white text-[8px] sm:text-[10px] px-0.5 sm:px-1.5 py-0.5 sm:truncate font-medium shadow-sm mb-[1px] h-1.5 sm:h-auto"><span class="hidden sm:inline">${p.title}</span></div>`;
                 }).join('');
 
                 let taskDots = dayTasks.map(t => {
-                    const color = (window.state.categories.find(c => c.name === t.category) || {}).color || 'bg-gray-500';
+                    const proj = window.state.projects.find(p=>p.title === t.category);
+                    const color = proj ? proj.color : 'bg-gray-500';
                     return `<div class="flex items-center gap-1 overflow-hidden"><div class="w-1 lg:w-1.5 h-1 lg:h-1.5 rounded-full flex-shrink-0 ${color}"></div><span class="text-[8px] lg:text-[10px] font-medium truncate hidden sm:inline ${t.status === 'Done' ? 'line-through text-gray-400' : 'text-gray-700'}">${t.title}</span></div>`;
                 }).join('');
 
@@ -503,9 +451,47 @@
                 </div>`;
             }
 
+            // Agenda List with Status Dropdown
+            let aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
+            let aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+            let agendaCombined = [...aTasks, ...aActions];
+            agendaCombined.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const STATUSES = ['To Do', 'In Progress', 'Done'];
+            
+            const agendaHTML = agendaCombined.length === 0 
+                ? `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">No schedule for this date.</p>`
+                : agendaCombined.map(item => {
+                    const isDone = item.status === 'Done';
+                    const proj = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId) : window.state.projects.find(p=>p.title === item.category);
+                    const catColorStr = proj ? proj.color : 'bg-gray-300';
+                    const prioClasses = PRIORITY_COLORS[item.priority || 'Medium'];
+
+                    const selectOptions = STATUSES.map(s => `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('');
+
+                    return `
+                    <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-center gap-3 lg:gap-4 transition-all relative overflow-hidden ${isDone ? 'bg-gray-50 border-gray-100 opacity-70' : 'bg-white shadow-sm'}">
+                        <div class="absolute left-0 top-0 bottom-0 w-1 ${catColorStr}"></div>
+                        <div class="flex-1 overflow-hidden cursor-pointer" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
+                            <div class="flex justify-between items-start mb-1">
+                                <h4 class="font-bold text-sm lg:text-base truncate ${isDone ? 'line-through text-gray-500' : 'text-gray-800'}">${item.title || item.text}</h4>
+                                <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${item.priority || 'Medium'}</span>
+                            </div>
+                            <div class="text-[10px] lg:text-xs text-gray-500 flex gap-3 truncate">
+                                ${item.time && !item.isAllDay ? `<span class="flex items-center gap-1 flex-shrink-0"><i data-lucide="clock" class="w-3 h-3"></i> ${item.time}</span>` : ''}
+                                ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> ${item.projectTitle}</span>` : ''}
+                            </div>
+                        </div>
+                        <select onchange="window.updateItemStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction}, this.value)" class="text-xs font-bold px-2 py-1.5 rounded outline-none border focus:ring-1 focus:ring-gray-300 cursor-pointer ${isDone ? 'bg-green-100 text-green-700 border-green-200' : (item.status==='In Progress' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200')}">
+                            ${selectOptions}
+                        </select>
+                    </div>`;
+                }).join('');
+
+
             return `
             <div class="flex flex-col gap-6 lg:gap-8 h-full">
-                <!-- Calendar -->
+                <!-- Calendar Grid -->
                 <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
                     <div class="flex justify-between items-center mb-4 lg:mb-6 min-w-[300px]">
                         <h2 class="text-xl lg:text-2xl font-bold">${MONTH_NAMES[window.state.calMonth]} ${window.state.calYear}</h2>
@@ -519,22 +505,22 @@
                     </div>
                     <div class="grid grid-cols-7 gap-1 lg:gap-2 min-w-[300px]">${calDaysHTML}</div>
                 </div>
-                <!-- Agenda -->
+                <!-- Agenda Schedule -->
                 <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex-1">
                     <h2 class="text-lg lg:text-xl font-bold mb-4 lg:mb-6 flex items-center gap-2">
                         <i data-lucide="clock" class="w-5 h-5 lg:w-6 lg:h-6 ${window.state.theme.mainText}"></i>
-                        ${window.state.searchQuery ? 'Search Results' : 'Agenda'} <span class="text-xs lg:text-sm font-normal text-gray-500">(${window.state.searchQuery ? `"${window.state.searchQuery}"` : formatFullDate(window.state.selectedDate)})</span>
+                        Schedule <span class="text-xs lg:text-sm font-normal text-gray-500">(${window.formatFullDate(window.state.selectedDate)})</span>
                     </h2>
-                    <div class="space-y-3 lg:space-y-4" id="agenda-list-container">
-                        ${renderAgendaList()}
+                    <div class="space-y-3 lg:space-y-4">
+                        ${agendaHTML}
                     </div>
                 </div>
             </div>`;
         }
 
-        function viewProjects() {
+        function viewDetails() {
             const projectsHTML = window.state.projects.map(project => {
-                const catColor = (window.state.categories.find(c => c.name === project.category) || {}).color || 'bg-gray-500';
+                const catColor = project.color || 'bg-gray-500';
                 const KANBAN_COLS = ['To Do', 'In Progress', 'Done'];
                 
                 const boardHTML = KANBAN_COLS.map(status => {
@@ -553,7 +539,7 @@
                         const prioClasses = PRIORITY_COLORS[action.priority || 'Medium'];
                         
                         return `
-                        <div draggable="true" ondragstart="window.dragStart(event, ${project.id}, ${action.id})" onclick="window.openEditTaskModal(${project.id}, ${action.id}, true)" class="kanban-card bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-300 transition group relative">
+                        <div draggable="true" ondragstart="window.dragStart(event, ${project.id}, ${action.id})" onclick="window.openEditTaskModal(${project.id}, ${action.id}, true)" class="kanban-card bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-300 transition group relative mb-3">
                             <div class="flex justify-between items-start mb-2">
                                 <span class="text-[10px] border px-1.5 py-0.5 rounded font-bold ${status === 'Done' ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${action.priority || 'Medium'}</span>
                                 <span class="text-[10px] ${dateClass}">${action.date}</span>
@@ -563,6 +549,8 @@
                         </div>`;
                     }).join('');
                     
+                    const addTaskBtn = status === 'To Do' ? `<button onclick="window.openCreateTaskModal(${project.id})" class="mt-2 w-full py-2 bg-white border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-800 hover:border-gray-500 transition flex items-center justify-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i> Add Task</button>` : '';
+
                     return `
                     <div class="flex-1 min-w-[260px] bg-gray-50 rounded-2xl p-3 border border-gray-100 flex flex-col" ondragover="window.allowDrop(event)" ondrop="window.dropCard(event, ${project.id}, '${status}')">
                         <div class="flex justify-between items-center mb-3 px-1">
@@ -572,35 +560,42 @@
                             </h4>
                             <span class="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">${colActions.length}</span>
                         </div>
-                        <div class="space-y-3 flex-1 min-h-[150px]">
+                        <div class="flex-1 min-h-[150px]">
                             ${cardsHTML}
+                            ${addTaskBtn}
                         </div>
                     </div>`;
                 }).join('');
 
+                const isCollapsed = project.isCollapsed;
+
                 return `
-                <div class="bg-white rounded-3xl p-5 lg:p-6 shadow-sm border border-gray-100 relative group overflow-hidden">
+                <div class="bg-white rounded-3xl p-5 lg:p-6 shadow-sm border border-gray-100 relative overflow-hidden transition-all">
                     <div class="absolute top-0 left-0 w-full h-1.5 ${catColor}"></div>
-                    <div class="flex flex-col sm:flex-row sm:justify-between items-start gap-4 mb-6 mt-2">
-                        <div>
-                            <div class="flex items-center gap-2 lg:gap-3">
-                                <h3 class="text-xl lg:text-2xl font-bold text-gray-800">${project.title}</h3>
-                                <button onclick="window.openProjectSettings(${project.id})" class="p-1.5 text-gray-400 hover:${window.state.theme.mainText} hover:${window.state.theme.lightBg} rounded-lg transition" title="Project Settings">
-                                    <i data-lucide="settings" class="w-4 h-4"></i>
-                                </button>
+                    <div class="flex flex-col sm:flex-row sm:justify-between items-start gap-4 ${isCollapsed ? 'mb-0' : 'mb-6'} mt-2">
+                        <div class="flex items-start gap-3 w-full">
+                            <button onclick="window.toggleProjectCollapse(${project.id})" class="mt-1 p-1 bg-gray-50 hover:bg-gray-200 rounded text-gray-500 transition">
+                                <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
+                            </button>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 lg:gap-3">
+                                    <h3 class="text-xl lg:text-2xl font-bold text-gray-800">${project.title}</h3>
+                                    <button onclick="window.openProjectSettings(${project.id})" class="p-1.5 text-gray-400 hover:${window.state.theme.mainText} hover:${window.state.theme.lightBg} rounded-lg transition" title="Edit Project">
+                                        <i data-lucide="edit-2" class="w-4 h-4 lg:w-5 lg:h-5"></i>
+                                    </button>
+                                </div>
+                                <p class="text-xs lg:text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-2">
+                                    <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3 lg:w-4 lg:h-4"></i> ${window.formatFullDate(project.startDate)} - ${project.endDate ? window.formatFullDate(project.endDate) : 'Ongoing'}</span>
+                                </p>
                             </div>
-                            <p class="text-xs lg:text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-2">
-                                <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3 lg:w-4 lg:h-4"></i> ${formatFullDate(project.startDate)} - ${project.endDate ? formatFullDate(project.endDate) : 'Ongoing'}</span>
-                                ${project.category ? `<span class="px-2 py-0.5 text-white rounded text-[10px] lg:text-xs ${catColor}">${project.category}</span>` : ''}
-                            </p>
                         </div>
-                        <div class="text-left sm:text-right">
+                        <div class="text-left sm:text-right hidden sm:block">
                             <span class="text-xl lg:text-2xl font-bold ${window.state.theme.mainText}">${project.progress}%</span>
                             <p class="text-[10px] lg:text-xs text-gray-400">Completed</p>
                         </div>
                     </div>
                     
-                    <div class="flex gap-4 overflow-x-auto pb-4 snap-x">
+                    <div class="flex gap-4 overflow-x-auto pb-4 snap-x ${isCollapsed ? 'hidden' : ''}">
                         ${boardHTML}
                     </div>
                 </div>`;
@@ -609,7 +604,7 @@
             return `
             <div class="space-y-6">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                    <h2 class="text-xl lg:text-2xl font-bold">Active Projects</h2>
+                    <h2 class="text-xl lg:text-2xl font-bold">Project Details</h2>
                     <button onclick="window.openCreateProjectModal()" class="${window.state.theme.mainBg} text-white px-4 py-2 rounded-xl text-sm font-semibold ${window.state.theme.hoverBg} transition flex items-center justify-center gap-2">
                         <i data-lucide="plus" class="w-4 h-4"></i> New Project
                     </button>
@@ -671,7 +666,6 @@
             const isEditing = data.isEdit;
 
             const projOpts = window.state.projects.map(p => `<option value="${p.id}" ${data.projectId == p.id ? 'selected' : ''}>${p.title}</option>`).join('');
-            const catOpts = window.state.categories.map(c => `<option value="${c.name}" ${data.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
             
             const STATUSES = ['To Do', 'In Progress', 'Done'];
             const statusOpts = STATUSES.map(s => `<option value="${s}" ${data.status == s ? 'selected' : ''}>${s}</option>`).join('');
@@ -692,22 +686,12 @@
                             <input type="text" id="utm-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="What needs to be done?" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 focus:outline-none focus:ring-1 focus:ring-gray-300 text-sm lg:text-lg font-medium" />
                         </div>
                         
-                        <div class="grid grid-cols-2 gap-3 lg:gap-4">
-                            <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="briefcase" class="w-3 h-3"></i> Project Assign</label>
-                                <select id="utm-project" onchange="window.updateModalProject(this.value)" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white focus:ring-1 focus:ring-gray-300" ${isEditing ? 'disabled' : ''}>
-                                    <option value="">-- Standalone Task --</option>
-                                    ${projOpts}
-                                </select>
-                            </div>
-                            ${!data.projectId ? `
-                            <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="tag" class="w-3 h-3"></i> Category</label>
-                                <select id="utm-category" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white focus:ring-1 focus:ring-gray-300">
-                                    <option value="" disabled ${!data.category ? 'selected' : ''}>${window.state.categories.length === 0 ? 'No categories' : 'Select...'}</option>
-                                    ${catOpts}
-                                </select>
-                            </div>` : '<div class="hidden"><input type="hidden" id="utm-category" value=""/></div>'}
+                        <div>
+                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="briefcase" class="w-3 h-3"></i> Project (Acts as Category)</label>
+                            <select id="utm-project" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white focus:ring-1 focus:ring-gray-300" ${isEditing ? 'disabled' : ''}>
+                                <option value="">-- General / No Project --</option>
+                                ${projOpts}
+                            </select>
                         </div>
 
                         <div class="grid grid-cols-2 gap-3 lg:gap-4">
@@ -734,11 +718,11 @@
                                 <div class="flex items-center justify-between mb-1">
                                     <label class="block text-[10px] lg:text-xs font-bold text-gray-500">Time</label>
                                     <div class="flex items-center gap-1.5">
-                                        <input type="checkbox" id="utm-allday" ${data.isAllDay ? 'checked' : ''} onchange="window.toggleModalAllDay(this.checked)" class="w-3 h-3 rounded" />
+                                        <input type="checkbox" id="utm-allday" ${data.isAllDay ? 'checked' : ''} onchange="window.toggleDOMAllDay(this.checked)" class="w-3 h-3 rounded" />
                                         <label for="utm-allday" class="text-[10px] lg:text-xs text-gray-600">All Day</label>
                                     </div>
                                 </div>
-                                <input type="time" id="utm-time" value="${data.time || ''}" ${data.isAllDay ? 'disabled' : ''} class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" />
+                                <input type="time" id="utm-time" value="${data.time || ''}" ${data.isAllDay ? 'disabled' : ''} class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white transition-opacity ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" />
                             </div>
                         </div>
 
@@ -760,14 +744,13 @@
             const data = window.state.projectForm;
             if(!data) return '';
             
-            const catOpts = window.state.categories.map(c => `<option value="${c.name}" ${data.category == c.name ? 'selected' : ''}>${c.name}</option>`).join('');
-            const colorBtns = TAILWIND_COLORS.map(color => `<button onclick="window.setNewCategoryColor('${color}')" class="w-5 h-5 lg:w-6 lg:h-6 rounded-full flex-shrink-0 ${color} ${window.state.newCategoryColor === color ? 'ring-2 ring-offset-1 ring-gray-800' : ''}"></button>`).join('');
+            const colorBtns = TAILWIND_COLORS.map(color => `<button type="button" onclick="window.setProjectColorDOM('${color}')" data-color="${color}" class="color-btn w-6 h-6 lg:w-8 lg:h-8 rounded-full flex-shrink-0 ${color} ${data.color === color ? 'ring-2 ring-offset-2 ring-gray-800' : ''} transition-all"></button>`).join('');
 
             return `
             <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
                 <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
                     <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project Settings' : 'Create New Project'}</h3>
+                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project' : 'Create New Project'}</h3>
                         <button onclick="window.closeProjectModal()" class="text-gray-400 hover:bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="overflow-y-auto p-4 lg:p-6 scrollbar-hide flex-1 space-y-4 lg:space-y-6">
@@ -786,24 +769,16 @@
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Category & Color</label>
-                            <div class="flex flex-col gap-2 lg:gap-3 mb-2 lg:mb-3 bg-gray-50 p-2 lg:p-3 rounded-xl border border-gray-100">
-                                <div class="flex gap-2">
-                                    <input type="text" id="new-cat-input" value="${window.state.newCategoryInput}" placeholder="Add new category..." class="flex-1 border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none" />
-                                    <button onclick="window.addNewCategory()" class="bg-gray-200 text-gray-700 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold hover:bg-gray-300">Add</button>
-                                </div>
-                                <div class="flex gap-2 overflow-x-auto pb-1 scrollbar-hide snap-x">${colorBtns}</div>
+                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2">Project Color</label>
+                            <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x p-2">
+                                ${colorBtns}
                             </div>
-                            <select id="pf-cat" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-sm bg-white outline-none">
-                                <option value="" disabled ${!data.category ? 'selected' : ''}>${window.state.categories.length === 0 ? "No categories" : "Select category..."}</option>
-                                ${catOpts}
-                            </select>
                         </div>
                     </div>
                     <div class="p-4 lg:p-6 border-t border-gray-100 bg-white flex flex-shrink-0 gap-3">
                         ${window.state.isEditingProject ? `<button onclick="window.deleteProject()" class="p-3 lg:p-3.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition" title="Delete Project"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
                         <button onclick="window.saveProject()" class="flex-1 ${window.state.theme.mainBg} text-white font-bold py-2.5 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition text-sm lg:text-base">
-                            ${window.state.isEditingProject ? 'Save Project Settings' : 'Create Project'}
+                            ${window.state.isEditingProject ? 'Save Project' : 'Create Project'}
                         </button>
                     </div>
                 </div>
@@ -813,161 +788,122 @@
         // ==========================================
         // 7. EVENT HANDLERS & LOGIC
         // ==========================================
-        window.setActiveTab = (tabId) => { window.state.activeTab = tabId; renderApp(); };
+        window.setActiveTab = (tabId) => { window.state.activeTab = tabId; window.renderApp(); };
+        window.saveSettingsName = () => { window.state.userName = document.getElementById('settings-username').value; window.saveToStorage(); window.renderApp(); };
+        window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(); window.renderApp(); };
+        window.handleSearch = (val) => { window.state.searchQuery = val; window.refreshTab(); };
         
-        window.saveSettingsName = () => { 
-            const val = document.getElementById('settings-username').value;
-            window.state.userName = val; 
-            window.saveToStorage(); 
-            renderApp(); 
+        window.changeSummaryMonth = (val) => { const [m, y] = val.split('-'); window.state.calMonth = parseInt(m); window.state.calYear = parseInt(y); window.refreshTab(); };
+        window.changeSummaryDate = (type, val) => {
+            if(type === 'month') window.state.calMonth = parseInt(val);
+            else if(type === 'year') window.state.calYear = parseInt(val);
+            window.refreshTab();
         };
 
-        window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(); renderApp(); };
-        window.handleSearch = (val) => { window.state.searchQuery = val; refreshTab(); };
-        window.changeSummaryMonth = (val) => { const [m, y] = val.split('-'); window.state.calMonth = parseInt(m); window.state.calYear = parseInt(y); refreshTab(); };
+        window.toggleMonthSummary = () => { window.state.showMonthSummary = !window.state.showMonthSummary; window.refreshTab(); };
+        window.setDashboardView = (mode) => { window.state.dashboardViewMode = mode; window.refreshTab(); };
+
         window.changeMonth = (offset) => {
             let newM = window.state.calMonth + offset; let newY = window.state.calYear;
             if (newM > 11) { newM = 0; newY++; } else if (newM < 0) { newM = 11; newY--; }
             if (newY < 2026 || (newY === 2026 && newM < 5) || newY > 2030) return;
-            window.state.calMonth = newM; window.state.calYear = newY;
-            refreshTab();
+            window.state.calMonth = newM; window.state.calYear = newY; window.refreshTab();
         };
-        window.selectDate = (dateStr) => { window.state.selectedDate = dateStr; refreshTab(); };
+        window.selectDate = (dateStr) => { window.state.selectedDate = dateStr; window.refreshTab(); };
 
-        // Toggle Status
-        window.toggleTaskStatus = (projectId, taskId, isAction) => {
+        window.toggleProjectCollapse = (id) => {
+            window.state.projects = window.state.projects.map(p => p.id === id ? {...p, isCollapsed: !p.isCollapsed} : p);
+            window.saveToStorage(); window.refreshTab();
+        };
+
+        window.updateItemStatus = (projectId, taskId, isAction, newStatus) => {
             if (isAction) {
                 window.state.projects = window.state.projects.map(p => {
                     if (p.id === projectId) {
-                        p.actions = p.actions.map(a => {
-                            if(a.id === taskId) {
-                                const newStatus = a.status === 'Done' ? 'To Do' : 'Done';
-                                return { ...a, status: newStatus, isCompleted: newStatus === 'Done' };
-                            }
-                            return a;
-                        });
-                        const comp = p.actions.filter(a => a.status === 'Done').length;
-                        p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
-                    }
-                    return p;
+                        p.actions = p.actions.map(a => a.id === taskId ? { ...a, status: newStatus, isCompleted: newStatus === 'Done' } : a);
+                        const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
+                    } return p;
                 });
             } else {
-                window.state.tasks = window.state.tasks.map(t => {
-                    if(t.id === taskId) {
-                        const newStatus = t.status === 'Done' ? 'To Do' : 'Done';
-                        return { ...t, status: newStatus, done: newStatus === 'Done' };
-                    }
-                    return t;
-                });
+                window.state.tasks = window.state.tasks.map(t => t.id === taskId ? { ...t, status: newStatus, done: newStatus === 'Done' } : t);
             }
-            window.saveToStorage(); refreshTab();
+            window.saveToStorage(); window.refreshTab();
         };
 
         // KANBAN DRAG AND DROP
-        window.dragStart = (e, pId, aId) => {
-            e.dataTransfer.setData('text/plain', JSON.stringify({ pId, aId }));
-        };
+        window.dragStart = (e, pId, aId) => { e.dataTransfer.setData('text/plain', JSON.stringify({ pId, aId })); };
         window.allowDrop = (e) => { e.preventDefault(); };
         window.dropCard = (e, targetPId, newStatus) => {
-            e.preventDefault();
-            const dataStr = e.dataTransfer.getData('text/plain');
-            if(!dataStr) return;
-            const data = JSON.parse(dataStr);
-            
+            e.preventDefault(); const dataStr = e.dataTransfer.getData('text/plain'); if(!dataStr) return; const data = JSON.parse(dataStr);
             if(data.pId === targetPId) {
                 window.state.projects = window.state.projects.map(p => {
                     if (p.id === targetPId) {
                         p.actions = p.actions.map(a => a.id === data.aId ? { ...a, status: newStatus, isCompleted: newStatus === 'Done' } : a);
-                        const comp = p.actions.filter(a => a.status === 'Done').length;
-                        p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
-                    }
-                    return p;
+                        const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
+                    } return p;
                 });
-                window.saveToStorage(); refreshTab();
+                window.saveToStorage(); window.refreshTab();
             }
         };
 
         // UNIFIED TASK MODAL
-        window.openCreateTaskModal = () => {
-            window.state.taskModalData = { id: null, title: '', projectId: '', status: 'To Do', priority: 'Medium', date: TODAY, time: '', isAllDay: false, details: '', category: '', isEdit: false };
-            window.state.isTaskModalOpen = true; renderModals();
+        window.openCreateTaskModal = (prefillProjectId = '') => { 
+            window.state.taskModalData = { id: null, title: '', projectId: prefillProjectId, status: 'To Do', priority: 'Medium', date: TODAY, time: '', isAllDay: false, details: '', category: '', isEdit: false }; 
+            window.state.isTaskModalOpen = true; window.renderModals(); 
         };
-
         window.openEditTaskModal = (projectId, taskId, isAction) => {
             if (isAction) {
-                const proj = window.state.projects.find(p => p.id === projectId);
-                const act = proj.actions.find(a => a.id === taskId);
-                window.state.taskModalData = { id: act.id, title: act.text, projectId: proj.id, status: act.status, priority: act.priority, date: act.date, time: '', isAllDay: false, details: act.details || '', category: proj.category, isEdit: true };
-            } else {
-                const task = window.state.tasks.find(t => t.id === taskId);
-                window.state.taskModalData = { ...task, projectId: '', isEdit: true };
-            }
-            window.state.isTaskModalOpen = true; renderModals();
+                const proj = window.state.projects.find(p => p.id === projectId); const act = proj.actions.find(a => a.id === taskId);
+                window.state.taskModalData = { id: act.id, title: act.text, projectId: proj.id, status: act.status, priority: act.priority, date: act.date, time: '', isAllDay: false, details: act.details || '', category: proj.title, isEdit: true };
+            } else window.state.taskModalData = { ...window.state.tasks.find(t => t.id === taskId), projectId: '', isEdit: true };
+            window.state.isTaskModalOpen = true; window.renderModals();
         };
-
-        window.closeTaskModal = () => { window.state.isTaskModalOpen = false; renderModals(); };
+        window.closeTaskModal = () => { window.state.isTaskModalOpen = false; window.renderModals(); };
         
-        window.updateModalProject = (val) => {
-            window.state.taskModalData.projectId = val;
-            renderModals();
-        };
-
-        window.toggleModalAllDay = (checked) => { 
-            window.state.taskModalData.isAllDay = checked; 
-            if(checked) window.state.taskModalData.time = ''; 
-            renderModals(); 
+        window.toggleDOMAllDay = (checked) => {
+            const timeInput = document.getElementById('utm-time');
+            if (!timeInput) return;
+            if(checked) {
+                timeInput.disabled = true;
+                timeInput.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                timeInput.disabled = false;
+                timeInput.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         };
 
         window.saveUnifiedTask = () => {
-            const d = window.state.taskModalData;
-            const title = document.getElementById('utm-title').value;
-            if (!title) return;
-
-            const projId = document.getElementById('utm-project').value;
-            const status = document.getElementById('utm-status').value;
-            const priority = document.getElementById('utm-priority').value;
-            const date = document.getElementById('utm-date').value;
-            const details = document.getElementById('utm-details').value;
-            const catEl = document.getElementById('utm-category');
-            const category = catEl ? catEl.value : '';
+            const d = window.state.taskModalData; const title = document.getElementById('utm-title').value; if (!title) return;
+            const projId = document.getElementById('utm-project').value, status = document.getElementById('utm-status').value, priority = document.getElementById('utm-priority').value, date = document.getElementById('utm-date').value, details = document.getElementById('utm-details').value;
             
-            const isAllDayEl = document.getElementById('utm-allday');
-            const isAllDay = isAllDayEl ? isAllDayEl.checked : false;
-            const timeEl = document.getElementById('utm-time');
-            const time = isAllDay ? '' : (timeEl ? timeEl.value : '');
-
+            const isAllDayEl = document.getElementById('utm-allday'); const isAllDay = isAllDayEl ? isAllDayEl.checked : false;
+            const timeEl = document.getElementById('utm-time'); const time = isAllDay ? '' : (timeEl ? timeEl.value : '');
             const isDone = status === 'Done';
+            
+            // Auto category based on project
+            const projObj = projId ? window.state.projects.find(p => p.id === parseInt(projId)) : null;
+            const categoryName = projObj ? projObj.title : 'General';
 
             if (d.isEdit) {
-                if (d.projectId) { // Editing Project Action
+                if (d.projectId) {
                     window.state.projects = window.state.projects.map(p => {
                         if (p.id === d.projectId) {
                             p.actions = p.actions.map(a => a.id === d.id ? { ...a, text: title, date, priority, status, details, isCompleted: isDone } : a);
-                            const comp = p.actions.filter(a => a.status === 'Done').length;
-                            p.progress = Math.round((comp / p.actions.length) * 100);
-                        }
-                        return p;
+                            const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = Math.round((comp / p.actions.length) * 100);
+                        } return p;
                     });
-                } else { // Editing Standalone Task
-                    window.state.tasks = window.state.tasks.map(t => t.id === d.id ? { ...t, title, date, time, isAllDay, priority, status, details, category, done: isDone } : t);
-                }
+                } else window.state.tasks = window.state.tasks.map(t => t.id === d.id ? { ...t, title, date, time, isAllDay, priority, status, details, category: categoryName, done: isDone } : t);
             } else {
-                // Creating new
                 if (projId) {
                     window.state.projects = window.state.projects.map(p => {
                         if (p.id === parseInt(projId)) {
                             p.actions.push({ id: Date.now(), text: title, date, priority, status, details, isCompleted: isDone });
-                            const comp = p.actions.filter(a => a.status === 'Done').length;
-                            p.progress = Math.round((comp / p.actions.length) * 100);
-                        }
-                        return p;
+                            const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = Math.round((comp / p.actions.length) * 100);
+                        } return p;
                     });
-                } else {
-                    window.state.tasks.push({ id: Date.now(), title, date, time, priority, status, details, category, done: isDone, isAllDay });
-                }
+                } else window.state.tasks.push({ id: Date.now(), title, date, time, priority, status, details, category: categoryName, done: isDone, isAllDay });
             }
-
-            window.state.isTaskModalOpen = false; window.saveToStorage(); renderModals(); refreshTab();
+            window.state.isTaskModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
         };
 
         window.deleteUnifiedTask = () => {
@@ -976,65 +912,35 @@
                 window.state.projects = window.state.projects.map(p => {
                     if (p.id === d.projectId) {
                         p.actions = p.actions.filter(a => a.id !== d.id);
-                        const comp = p.actions.filter(a => a.status === 'Done').length;
-                        p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
-                    }
-                    return p;
+                        const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
+                    } return p;
                 });
-            } else {
-                window.state.tasks = window.state.tasks.filter(t => t.id !== d.id);
-            }
-            window.state.isTaskModalOpen = false; window.saveToStorage(); renderModals(); refreshTab();
+            } else window.state.tasks = window.state.tasks.filter(t => t.id !== d.id);
+            window.state.isTaskModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
         };
 
-        // Project Modals
-        window.openCreateProjectModal = () => {
-            window.state.projectForm = { id: null, title: '', startDate: TODAY, endDate: '', category: '' };
-            window.state.isEditingProject = false; window.state.isProjectModalOpen = true; renderModals();
-        };
-        window.openProjectSettings = (id) => {
-            const proj = window.state.projects.find(p => p.id === id);
-            window.state.projectForm = { id: proj.id, title: proj.title, startDate: proj.startDate, endDate: proj.endDate, category: proj.category };
-            window.state.isEditingProject = true; window.state.isProjectModalOpen = true; renderModals();
-        };
-        window.closeProjectModal = () => { window.state.isProjectModalOpen = false; window.state.isEditingProject = false; renderModals(); };
+        window.openCreateProjectModal = () => { window.state.projectForm = { id: null, title: '', startDate: TODAY, endDate: '', color: TAILWIND_COLORS[0] }; window.state.isEditingProject = false; window.state.isProjectModalOpen = true; window.renderModals(); };
+        window.openProjectSettings = (id) => { const proj = window.state.projects.find(p => p.id === id); window.state.projectForm = { id: proj.id, title: proj.title, startDate: proj.startDate, endDate: proj.endDate, color: proj.color || TAILWIND_COLORS[0] }; window.state.isEditingProject = true; window.state.isProjectModalOpen = true; window.renderModals(); };
+        window.closeProjectModal = () => { window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.renderModals(); };
         
+        window.setProjectColorDOM = (color) => {
+            window.state.projectForm.color = color;
+            document.querySelectorAll('.color-btn').forEach(btn => {
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-800');
+                if(btn.dataset.color === color) btn.classList.add('ring-2', 'ring-offset-2', 'ring-gray-800');
+            });
+        };
+
         window.saveProject = () => {
-            const title = document.getElementById('pf-title').value;
-            if (!title) return;
-            const startDate = document.getElementById('pf-start').value;
-            const endDate = document.getElementById('pf-end').value;
-            const category = document.getElementById('pf-cat').value;
-
-            if (window.state.isEditingProject) {
-                window.state.projects = window.state.projects.map(p => p.id === window.state.projectForm.id ? { ...p, title, startDate, endDate, category } : p);
-            } else {
-                window.state.projects.push({ id: Date.now(), title, startDate, endDate, category, progress: 0, actions: [] });
-            }
-
-            window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.saveToStorage(); renderModals(); refreshTab();
+            const title = document.getElementById('pf-title').value; if (!title) return;
+            const startDate = document.getElementById('pf-start').value, endDate = document.getElementById('pf-end').value;
+            const color = window.state.projectForm.color;
+            if (window.state.isEditingProject) window.state.projects = window.state.projects.map(p => p.id === window.state.projectForm.id ? { ...p, title, startDate, endDate, color } : p);
+            else window.state.projects.push({ id: Date.now(), title, startDate, endDate, color, isCollapsed: false, progress: 0, actions: [] });
+            window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
         };
         
-        window.deleteProject = () => {
-            window.state.projects = window.state.projects.filter(p => p.id !== window.state.projectForm.id);
-            window.state.isProjectModalOpen = false; window.saveToStorage(); renderModals(); refreshTab();
-        };
-
-        window.setNewCategoryColor = (color) => { window.state.newCategoryColor = color; renderModals(); };
-        window.addNewCategory = () => {
-            const input = document.getElementById('new-cat-input').value;
-            if (input.trim() && !window.state.categories.find(c => c.name === input.trim())) {
-                window.state.categories.push({ name: input.trim(), color: window.state.newCategoryColor });
-                if(window.state.isProjectModalOpen) window.state.projectForm.category = input.trim();
-                window.saveToStorage(); renderModals();
-            }
-        };
-
-        // ==========================================
-        // 8. INITIALIZE APP
-        // ==========================================
-        loadFromStorage();
-        renderApp();
+        window.deleteProject = () => { window.state.projects = window.state.projects.filter(p => p.id !== window.state.projectForm.id); window.state.isProjectModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab(); };
 
     </script>
 </body>
