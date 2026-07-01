@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nytask! Dashboard</title>
-    <!-- Favicon (Icon Tab Browser) -->
+    <!-- Favicon -->
     <link rel="icon" type="image/png" href="logo.png">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -16,9 +16,13 @@
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
         .kanban-card { cursor: grab; }
         .kanban-card:active { cursor: grabbing; }
+        
+        /* Smooth transitions for dark mode */
+        * { transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease; }
     </style>
 </head>
-<body class="bg-slate-50 font-sans overflow-hidden text-gray-800">
+<!-- Default to light mode (slate-50), will be overridden by JS if dark mode is selected -->
+<body class="bg-slate-50 font-sans overflow-hidden text-gray-800" id="body">
     
     <!-- Loading Screen -->
     <div id="loading-screen" class="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center gap-4">
@@ -26,19 +30,18 @@
         <p class="font-bold text-gray-500 tracking-wide animate-pulse" id="loading-text">Checking Authentication...</p>
     </div>
 
-        <!-- Login Screen -->
+    <!-- Login Screen -->
     <div id="login-screen" class="fixed inset-0 bg-slate-50 z-[90] hidden flex-col items-center justify-center p-6 text-center">
-        <div class="bg-white p-8 lg:p-10 rounded-3xl shadow-xl max-w-md w-full flex flex-col items-center">
-            
-            <!-- Logo nytask! -->
+        <div class="bg-white p-8 lg:p-10 rounded-3xl shadow-xl max-w-md w-full flex flex-col items-center border border-gray-100">
+            <!-- Logo -->
             <div class="h-12 lg:h-14 mb-6 flex items-center justify-center">
-                <img src="logo.png" alt="nytask!" class="h-full object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-4xl lg:text-5xl tracking-tight text-[#285c54]&quot;>nytask!</span>'">
+                <img src="logo.png" alt="nytask!" class="h-full object-contain" onerror="this.onerror=null; this.outerHTML='<span class=\\'font-extrabold text-4xl lg:text-5xl tracking-tight text-[#285c54]\\'>nytask!</span>'">
             </div>
 
             <h1 class="text-2xl font-bold text-gray-800 mb-2">Welcome to nytask!</h1>
             <p class="text-sm text-gray-500 mb-8">Sign in to sync your tasks, projects, and agendas across all your devices.</p>
             
-            <button onclick="window.loginWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-200 text-gray-700 font-bold py-3.5 px-4 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition shadow-sm">
+            <button onclick="window.loginWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-bold py-3.5 px-4 rounded-xl hover:bg-gray-50 transition shadow-sm">
                 <svg class="w-5 h-5" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -84,8 +87,10 @@
         const provider = new GoogleAuthProvider();
 
         // ==========================================
-        // 1. CONSTANTS & DEVICE TIME
+        // 1. CONSTANTS, TIME & TELEGRAM
         // ==========================================
+        const TELEGRAM_BOT_TOKEN = "8620644076:AAFMscJ0jQN5PKiGHMA6gGi7cqDC4WRO7W8"; // Disediakan oleh sistem
+
         const dateObj = new Date();
         const TODAY = dateObj.getFullYear() + '-' + String(dateObj.getMonth() + 1).padStart(2, '0') + '-' + String(dateObj.getDate()).padStart(2, '0');
         
@@ -93,15 +98,13 @@
         const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const DAYS_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+        // Theme configurations with dark mode support tags
         const THEMES = [
-            { id: 'teal', name: 'Teal', mainBg: 'bg-[#285c54]', mainText: 'text-[#285c54]', mainBorder: 'border-[#285c54]', hoverBg: 'hover:bg-[#1e4740]', lightBg: 'bg-[#eef7f5]', accentText: 'text-[#a7d3cb]' },
-            { id: 'blue', name: 'Pacific Blue', mainBg: 'bg-[#0096c7]', mainText: 'text-[#0096c7]', mainBorder: 'border-[#0096c7]', hoverBg: 'hover:bg-[#0077b6]', lightBg: 'bg-[#e0f2fe]', accentText: 'text-[#bae6fd]' },
-            { id: 'navy', name: 'Navy', mainBg: 'bg-[#1e3a8a]', mainText: 'text-[#1e3a8a]', mainBorder: 'border-[#1e3a8a]', hoverBg: 'hover:bg-[#172554]', lightBg: 'bg-[#eff6ff]', accentText: 'text-[#bfdbfe]' },
-            { id: 'rose', name: 'Rose', mainBg: 'bg-[#be123c]', mainText: 'text-[#be123c]', mainBorder: 'border-[#be123c]', hoverBg: 'hover:bg-[#9f1239]', lightBg: 'bg-[#fff1f2]', accentText: 'text-[#fecdd3]' },
-            { id: 'lilac', name: 'Lilac', mainBg: 'bg-[#7e22ce]', mainText: 'text-[#7e22ce]', mainBorder: 'border-[#7e22ce]', hoverBg: 'hover:bg-[#6b21a8]', lightBg: 'bg-[#faf5ff]', accentText: 'text-[#e9d5ff]' },
-            { id: 'mint', name: 'Mint Green', mainBg: 'bg-[#059669]', mainText: 'text-[#059669]', mainBorder: 'border-[#059669]', hoverBg: 'hover:bg-[#047857]', lightBg: 'bg-[#ecfdf5]', accentText: 'text-[#a7f3d0]' },
-            { id: 'peach', name: 'Peach', mainBg: 'bg-[#ea580c]', mainText: 'text-[#ea580c]', mainBorder: 'border-[#ea580c]', hoverBg: 'hover:bg-[#c2410c]', lightBg: 'bg-[#fff7ed]', accentText: 'text-[#fed7aa]' },
-            { id: 'night', name: 'Night', mainBg: 'bg-[#171717]', mainText: 'text-[#171717]', mainBorder: 'border-[#171717]', hoverBg: 'hover:bg-[#262626]', lightBg: 'bg-[#f5f5f5]', accentText: 'text-[#d4d4d4]' }
+            { id: 'teal', name: 'Teal', mainBg: 'bg-[#285c54]', mainText: 'text-[#285c54]', mainBorder: 'border-[#285c54]', hoverBg: 'hover:bg-[#1e4740]', lightBg: 'bg-[#eef7f5]', accentText: 'text-[#a7d3cb]', isDark: false },
+            { id: 'blue', name: 'Pacific Blue', mainBg: 'bg-[#0096c7]', mainText: 'text-[#0096c7]', mainBorder: 'border-[#0096c7]', hoverBg: 'hover:bg-[#0077b6]', lightBg: 'bg-[#e0f2fe]', accentText: 'text-[#bae6fd]', isDark: false },
+            { id: 'rose', name: 'Rose', mainBg: 'bg-[#be123c]', mainText: 'text-[#be123c]', mainBorder: 'border-[#be123c]', hoverBg: 'hover:bg-[#9f1239]', lightBg: 'bg-[#fff1f2]', accentText: 'text-[#fecdd3]', isDark: false },
+            { id: 'peach', name: 'Peach', mainBg: 'bg-[#ea580c]', mainText: 'text-[#ea580c]', mainBorder: 'border-[#ea580c]', hoverBg: 'hover:bg-[#c2410c]', lightBg: 'bg-[#fff7ed]', accentText: 'text-[#fed7aa]', isDark: false },
+            { id: 'dark', name: 'Dark Mode', mainBg: 'bg-gray-900', mainText: 'text-gray-100', mainBorder: 'border-gray-600', hoverBg: 'hover:bg-black', lightBg: 'bg-gray-800', accentText: 'text-gray-400', isDark: true }
         ];
 
         const TABS = [
@@ -112,16 +115,16 @@
         ];
 
         const PRIORITY_SCORES = { 'High': 3, 'Medium': 2, 'Low': 1 };
-        const PRIORITY_COLORS = { 
-            'High': 'bg-red-100 text-red-700 border-red-200', 
-            'Medium': 'bg-orange-100 text-orange-700 border-orange-200', 
-            'Low': 'bg-blue-100 text-blue-700 border-blue-200' 
-        };
+        
+        // Priority colors adapt slightly to dark mode for readability
+        const getPriorityColors = (isDark) => ({
+            'High': isDark ? 'bg-red-900/50 text-red-400 border-red-800/50' : 'bg-red-100 text-red-700 border-red-200', 
+            'Medium': isDark ? 'bg-orange-900/50 text-orange-400 border-orange-800/50' : 'bg-orange-100 text-orange-700 border-orange-200', 
+            'Low': isDark ? 'bg-blue-900/50 text-blue-400 border-blue-800/50' : 'bg-blue-100 text-blue-700 border-blue-200' 
+        });
 
         window.formatFullDate = function(dateStr) {
-            if (!dateStr) return '';
-            const d = new Date(dateStr);
-            if (isNaN(d.getTime())) return dateStr;
+            if (!dateStr) return ''; const d = new Date(dateStr); if (isNaN(d.getTime())) return dateStr;
             return `${DAYS_NAMES[d.getDay()]}, ${d.getDate().toString().padStart(2, '0')} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
         };
 
@@ -130,19 +133,16 @@
         // ==========================================
         window.state = {
             currentUser: null,
-            activeTab: 'Dashboard', 
-            userName: 'Netalen', 
-            theme: THEMES[0], 
+            activeTab: 'Dashboard', userName: 'Netalen', theme: THEMES[0], 
+            dashboardViewMode: 'all', showMonthSummary: false,
             
-            dashboardViewMode: 'all', 
-            showMonthSummary: false,
+            // Telegram Preferences
+            telegramChatId: '',
+            autoReminderEnabled: false,
+            lastReminderSentDate: '', // To prevent spamming everyday
             
-            tasks: [], 
-            projects: [],
-            
-            calMonth: dateObj.getMonth(), 
-            calYear: dateObj.getFullYear(), 
-            selectedDate: TODAY,
+            tasks: [], projects: [],
+            calMonth: dateObj.getMonth(), calYear: dateObj.getFullYear(), selectedDate: TODAY,
             
             isTaskModalOpen: false, taskModalData: null,
             isProjectModalOpen: false, projectForm: null,
@@ -160,8 +160,7 @@
                 document.getElementById('loading-text').innerText = 'Syncing your data...';
                 document.getElementById('loading-screen').style.display = 'flex';
 
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'tasktracker';
-                const docRef = doc(db, 'artifacts', appId, 'users', user.uid);
+                const docRef = doc(db, 'artifacts', 'nytask', 'users', user.uid);
 
                 if (unsubscribeSnapshot) unsubscribeSnapshot();
 
@@ -170,34 +169,45 @@
                         const data = docSnap.data();
                         window.state.userName = data.userName || user.displayName || 'User';
                         window.state.theme = THEMES.find(t=>t.id === data.themeId) || THEMES[0];
+                        
+                        window.state.telegramChatId = data.telegramChatId || '';
+                        window.state.autoReminderEnabled = data.autoReminderEnabled || false;
+                        window.state.lastReminderSentDate = data.lastReminderSentDate || '';
+
                         window.state.tasks = data.tasks || [];
                         window.state.projects = data.projects || [];
-                        
                         window.state.projects.forEach(p => { if(typeof p.isCollapsed === 'undefined') p.isCollapsed = false; });
                     } else {
                         window.state.userName = user.displayName || 'User';
-                        window.state.tasks = [];
-                        window.state.projects = [];
+                        window.state.tasks = []; window.state.projects = [];
                     }
                     
                     document.getElementById('loading-screen').style.display = 'none';
+                    window.applyThemeGlobal();
                     window.renderApp();
                     window.refreshTab();
+
+                    // Check if we need to send auto reminder TODAY
+                    window.checkAndSendAutoReminder();
+
                 }, (err) => {
                     console.error("Firebase Sync Error:", err);
-                    alert("Error syncing data. Check your Firestore Rules.");
                     document.getElementById('loading-screen').style.display = 'none';
                 });
 
-                window.saveToStorage = async function() {
+                window.saveToStorage = async function(triggerRender = true) {
                     if(!window.state.currentUser) return;
                     const dataToSave = {
                         userName: window.state.userName,
                         themeId: window.state.theme.id,
+                        telegramChatId: window.state.telegramChatId,
+                        autoReminderEnabled: window.state.autoReminderEnabled,
+                        lastReminderSentDate: window.state.lastReminderSentDate,
                         tasks: window.state.tasks,
                         projects: window.state.projects
                     };
                     try { await setDoc(docRef, dataToSave); } catch(e) { console.error("Save failed:", e); }
+                    if (triggerRender) { window.applyThemeGlobal(); window.renderApp(); window.refreshTab(); }
                 };
 
             } else {
@@ -210,26 +220,48 @@
             }
         });
 
-        // LOGIN / LOGOUT FUNCTIONS
+        // LOGIN LOGOUT
         window.loginWithGoogle = () => {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('loading-text').innerText = 'Signing in...';
             document.getElementById('loading-screen').style.display = 'flex';
             signInWithPopup(auth, provider).catch(error => {
-                console.error("Login failed", error);
                 document.getElementById('loading-screen').style.display = 'none';
                 document.getElementById('login-screen').style.display = 'flex';
                 alert("Failed to login: " + error.message);
             });
         };
+        window.logout = () => signOut(auth).catch(error => console.error("Logout error", error));
 
-        window.logout = () => {
-            signOut(auth).catch(error => console.error("Logout error", error));
+        // ==========================================
+        // 3. CORE RENDERING ENGINE & THEME APPLY
+        // ==========================================
+        window.applyThemeGlobal = function() {
+            const body = document.getElementById('body');
+            if (window.state.theme.isDark) {
+                body.classList.remove('bg-slate-50', 'text-gray-800');
+                body.classList.add('bg-gray-950', 'text-gray-200');
+            } else {
+                body.classList.remove('bg-gray-950', 'text-gray-200');
+                body.classList.add('bg-slate-50', 'text-gray-800');
+            }
         };
 
-        // ==========================================
-        // 3. CORE RENDERING ENGINE
-        // ==========================================
+        // UI HELPERS FOR DARK MODE
+        const uiConfig = () => {
+            const d = window.state.theme.isDark;
+            return {
+                bgCard: d ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100',
+                bgSecondary: d ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200',
+                textMain: d ? 'text-gray-100' : 'text-gray-800',
+                textMuted: d ? 'text-gray-400' : 'text-gray-500',
+                inputBg: d ? 'bg-gray-800 border-gray-700 text-gray-200 focus:ring-gray-600' : 'bg-white border-gray-200 text-gray-700 focus:ring-gray-300',
+                kanbanCol: d ? 'bg-gray-800/50 border-gray-800' : 'bg-gray-50 border-gray-100',
+                calEmpty: d ? 'bg-gray-900/50 border-gray-800' : 'bg-gray-50/50 border-gray-50',
+                iconColor: d ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600',
+            }
+        };
+
         window.renderApp = function() {
             if(!window.state.currentUser) return;
             document.getElementById('app').innerHTML = `
@@ -263,16 +295,101 @@
         };
 
         // ==========================================
-        // 4. LAYOUT COMPONENTS
+        // 4. TELEGRAM LOGIC
+        // ==========================================
+        window.sendTelegramReminder = async function(isManual = false) {
+            if (!window.state.telegramChatId) {
+                if(isManual) alert("Please enter your Telegram Chat ID in the Settings first.");
+                return;
+            }
+
+            const btn = document.getElementById('btn-telegram-test');
+            let originalText = '';
+            if(btn && isManual) {
+                originalText = btn.innerHTML;
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Sending...`;
+                btn.disabled = true;
+            }
+
+            try {
+                // Collect Pending Tasks for Today
+                const todaysTasks = window.state.tasks.filter(t => t.date === TODAY && t.status !== 'Done');
+                const todaysActions = window.state.projects.flatMap(p => 
+                    p.actions.filter(a => a.date === TODAY && a.status !== 'Done').map(a => ({...a, projectTitle: p.title}))
+                );
+                
+                const allPending = [...todaysTasks, ...todaysActions];
+                
+                // Format Telegram Message
+                let message = `🔔 *nytask! Daily Reminder* 🔔\n\n`;
+                message += `📅 *Date:* ${window.formatFullDate(TODAY)}\n`;
+                message += `👤 *User:* ${window.state.userName}\n\n`;
+
+                if (allPending.length === 0) {
+                    message += `🎉 Awesome! You have *0 pending tasks* for today. Take a break!`;
+                } else {
+                    message += `You have *${allPending.length} pending task(s)* due today:\n\n`;
+                    allPending.forEach((item, index) => {
+                        const prioIcon = item.priority === 'High' ? '🔴' : (item.priority === 'Medium' ? '🟡' : '🔵');
+                        const projCatInfo = item.projectTitle ? `[Project: ${item.projectTitle}]` : (item.category && item.category!=='General' ? `[${item.category}]` : '');
+                        message += `${index + 1}. ${prioIcon} *${item.title || item.text}*\n   ${projCatInfo} ${item.time && !item.isAllDay ? `🕒 ${item.time}` : '🕒 All Day'}\n`;
+                    });
+                    message += `\n💪 Let's get them done!`;
+                }
+
+                // Send via Telegram API
+                const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: window.state.telegramChatId, text: message, parse_mode: 'Markdown' })
+                });
+
+                const result = await response.json();
+                
+                if (result.ok) {
+                    if(isManual) alert("Reminder sent successfully to your Telegram!");
+                    // Update last sent date to prevent re-sending today
+                    if(!isManual) {
+                        window.state.lastReminderSentDate = TODAY;
+                        window.saveToStorage(false); // background save
+                    }
+                } else {
+                    if(isManual) alert("Failed to send reminder. Check if your Chat ID is correct.");
+                }
+
+            } catch (error) {
+                console.error("Telegram API Error:", error);
+                if(isManual) alert("Something went wrong. Please try again.");
+            } finally {
+                if(btn && isManual) {
+                    btn.innerHTML = originalText; btn.disabled = false; lucide.createIcons();
+                }
+            }
+        };
+
+        window.checkAndSendAutoReminder = function() {
+            if (window.state.autoReminderEnabled && window.state.telegramChatId) {
+                // If we haven't sent it today
+                if (window.state.lastReminderSentDate !== TODAY) {
+                    console.log("Triggering auto Telegram reminder for today...");
+                    window.sendTelegramReminder(false);
+                }
+            }
+        };
+
+
+        // ==========================================
+        // 5. LAYOUT & VIEWS RENDERING
         // ==========================================
         function renderMobileHeader() {
             return `
-            <header class="lg:hidden ${window.state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
+            <header class="lg:hidden ${window.state.theme.mainBg} ${window.state.theme.isDark ? 'border-b border-gray-800' : ''} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
                 <div class="flex items-center gap-3">
                     <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-10 h-10 rounded-full border-2 border-white/20 bg-black/20 object-cover">
                     <div>
                         <div class="flex items-center gap-1.5 h-5">
-                            <img src="logo.png" alt="nytask!" class="h-4 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-sm tracking-tight&quot;>nytask!</span>'">
+                            <img src="logo.png" alt="nytask!" class="h-4 object-contain filter invert" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-sm tracking-tight&quot;>nytask!</span>'">
                         </div>
                         <p class="text-[10px] mt-0.5 ${window.state.theme.accentText}">Hello, ${window.state.userName}</p>
                     </div>
@@ -281,6 +398,7 @@
         }
 
         function renderDesktopSidebar() {
+            const ui = uiConfig();
             const navItems = TABS.map(t => `
                 <button onclick="window.setActiveTab('${t.id}')" class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${window.state.activeTab === t.id ? 'bg-white/10 font-medium shadow-sm' : 'text-white/70 hover:bg-white/5 hover:text-white'}">
                     <i data-lucide="${t.icon}" class="w-5 h-5"></i> ${t.name}
@@ -288,10 +406,11 @@
             `).join('');
 
             return `
-            <aside class="hidden lg:flex w-64 ${window.state.theme.mainBg} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
+            <aside class="hidden lg:flex w-64 ${window.state.theme.mainBg} ${window.state.theme.isDark ? 'border-r border-gray-800' : ''} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
                 <div class="p-8 pb-4">
                     <div class="flex items-center gap-3 mb-10 h-8">
-                        <img src="logo.png" alt="nytask!" class="h-7 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-2xl tracking-tight&quot;>nytask!</span>'">
+                        <!-- Make logo white for sidebar -->
+                        <img src="logo.png" alt="nytask!" class="h-7 object-contain filter invert" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-2xl tracking-tight&quot;>nytask!</span>'">
                     </div>
                     <div class="flex flex-col items-center mb-6">
                         <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white/20 bg-black/20 object-cover mb-4 shadow-lg">
@@ -303,33 +422,35 @@
         }
 
         function renderMobileNav() {
+            const ui = uiConfig();
             const navItems = TABS.map(t => `
-                <button onclick="window.setActiveTab('${t.id}')" class="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${window.state.activeTab === t.id ? window.state.theme.mainText : 'text-gray-400'}">
+                <button onclick="window.setActiveTab('${t.id}')" class="flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${window.state.activeTab === t.id ? window.state.theme.mainText : ui.textMuted}">
                     <i data-lucide="${t.icon}" class="w-5 h-5 ${window.state.activeTab === t.id ? 'fill-current opacity-20' : ''}"></i>
                     <span class="text-[9px] font-bold">${t.name}</span>
                 </button>
             `).join('');
-            return `<div class="lg:hidden fixed bottom-0 left-0 w-full bg-white border-t border-gray-200 z-40 flex justify-around items-center h-16 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">${navItems}</div>`;
+            return `<div class="lg:hidden fixed bottom-0 left-0 w-full ${ui.bgCard} border-t ${ui.bgCard} z-40 flex justify-around items-center h-16 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">${navItems}</div>`;
         }
 
         function renderMainContent() {
+            const ui = uiConfig();
             const title = window.state.activeTab === 'Dashboard' ? `Hello, ${window.state.userName}` : TABS.find(t=>t.id === window.state.activeTab).name;
             return `
             <main class="flex-1 p-4 lg:p-10 pb-28 lg:pb-10 overflow-y-auto scrollbar-hide flex flex-col relative">
                 <!-- Desktop Header -->
                 <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 flex-shrink-0">
                     <div>
-                        <h1 class="text-3xl font-bold tracking-tight">${title}</h1>
-                        <p class="text-gray-500 mt-1 font-medium">Today is ${window.formatFullDate(TODAY)}</p>
+                        <h1 class="text-3xl font-bold tracking-tight ${ui.textMain}">${title}</h1>
+                        <p class="${ui.textMuted} mt-1 font-medium">Today is ${window.formatFullDate(TODAY)}</p>
                     </div>
                 </header>
 
                 <!-- Mobile Header -->
                 <div class="lg:hidden mb-4 space-y-2">
                     <div class="flex justify-between items-end">
-                        <h1 class="text-2xl font-bold tracking-tight">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
+                        <h1 class="text-2xl font-bold tracking-tight ${ui.textMain}">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
                     </div>
-                    <p class="text-xs font-bold text-gray-500">${window.formatFullDate(TODAY)}</p>
+                    <p class="text-xs font-bold ${ui.textMuted}">${window.formatFullDate(TODAY)}</p>
                 </div>
 
                 <!-- Tab Router -->
@@ -340,27 +461,26 @@
                     ${window.state.activeTab === 'Settings' ? viewSettings() : ''}
                 </div>
 
-                <button onclick="window.openCreateTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 bg-gray-900 text-white rounded-full flex items-center justify-center shadow-xl ${window.state.theme.hoverBg} hover:scale-105 transition-all z-30 group" title="Add New Task">
+                <button onclick="window.openCreateTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 bg-gray-900 dark:bg-white dark:text-gray-900 text-white rounded-full flex items-center justify-center shadow-xl ${window.state.theme.hoverBg} dark:hover:bg-gray-200 hover:scale-105 transition-all z-30 group" title="Add New Task">
                     <i data-lucide="plus" class="w-6 h-6 lg:w-8 lg:h-8 group-hover:rotate-90 transition-transform duration-300"></i>
                 </button>
             </main>`;
         }
 
         // ==========================================
-        // 5. TAB VIEWS & AGENDAS
+        // AGENDAS & VIEWS (WITH DARK MODE APPLIED)
         // ==========================================
-
         function viewDashboard() {
-            // Calculate Today's Stats
+            const ui = uiConfig();
+            const PRIO = getPriorityColors(window.state.theme.isDark);
+            
             const todaysTasks = window.state.tasks.filter(t => t.date === TODAY);
             const todaysActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === TODAY));
             const allToday = [...todaysTasks, ...todaysActions];
-            
             const todayDone = allToday.filter(i => i.status === 'Done').length;
             const todayNotDone = allToday.length - todayDone;
             const todayTotal = allToday.length;
 
-            // Calculate Month's Stats
             let monthComp = 0, monthToDo = 0;
             window.state.tasks.forEach(t => { const d = new Date(t.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { t.status === 'Done' ? monthComp++ : monthToDo++; }});
             window.state.projects.forEach(p => { p.actions.forEach(a => { const d = new Date(a.date); if (d.getMonth() === window.state.calMonth && d.getFullYear() === window.state.calYear) { a.status === 'Done' ? monthComp++ : monthToDo++; }});});
@@ -371,12 +491,10 @@
                 return start <= filterEnd && end >= filterStart;
             }).length;
 
-            // Date Dropdowns
             let years = []; for(let i=2026; i<=2030; i++) years.push(i);
             const monthOpts = MONTH_NAMES.map((m, idx) => `<option value="${idx}" ${idx === window.state.calMonth ? 'selected' : ''}>${m}</option>`).join('');
             const yearOpts = years.map(y => `<option value="${y}" ${y === window.state.calYear ? 'selected' : ''}>${y}</option>`).join('');
 
-            // Tasks List Display Logic (Pure Overview, no checklist)
             let displayList = [];
             if (window.state.dashboardViewMode === 'all') {
                 const aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
@@ -391,86 +509,84 @@
             displayList.sort((a, b) => new Date(a.date) - new Date(b.date));
 
             const listHTML = displayList.length === 0 
-                ? `<p class="text-sm text-gray-500 italic p-4 text-center border border-dashed rounded-xl">No tasks found for this view.</p>`
+                ? `<p class="text-sm ${ui.textMuted} italic p-4 text-center border border-dashed rounded-xl border-gray-300 dark:border-gray-700">No tasks found for this view.</p>`
                 : displayList.map(item => {
                     const isDone = item.status === 'Done';
                     const proj = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId) : window.state.projects.find(p=>p.title === item.category);
-                    const catColorStr = proj ? proj.color : 'bg-gray-300';
-                    const prioClasses = PRIORITY_COLORS[item.priority || 'Medium'];
+                    const catColorStr = proj ? proj.color : 'bg-gray-500';
+                    const prioClasses = PRIO[item.priority || 'Medium'];
+                    const doneColor = window.state.theme.isDark ? 'bg-gray-800' : 'bg-gray-200';
                     
                     return `
-                    <div class="p-3 lg:p-4 rounded-xl border flex flex-col gap-2 transition-all relative overflow-hidden bg-white shadow-sm hover:shadow-md cursor-pointer" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
-                        <div class="absolute left-0 top-0 bottom-0 w-1 ${isDone ? 'bg-gray-200' : catColorStr}"></div>
+                    <div class="p-3 lg:p-4 rounded-xl border ${ui.bgCard} flex flex-col gap-2 transition-all relative overflow-hidden shadow-sm hover:shadow-md cursor-pointer" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
+                        <div class="absolute left-0 top-0 bottom-0 w-1 ${isDone ? doneColor : catColorStr}"></div>
                         <div class="flex justify-between items-start w-full pl-2">
-                            <h4 class="font-bold text-sm lg:text-base ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}">${item.title || item.text}</h4>
-                            <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${item.priority || 'Medium'}</span>
+                            <h4 class="font-bold text-sm lg:text-base ${isDone ? `line-through ${ui.textMuted}` : ui.textMain}">${item.title || item.text}</h4>
+                            <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? `${ui.bgSecondary} ${ui.textMuted}` : prioClasses}">${item.priority || 'Medium'}</span>
                         </div>
                         <div class="pl-2 w-full flex justify-between items-end">
-                             <div class="text-[10px] lg:text-xs text-gray-500 font-medium">
+                             <div class="text-[10px] lg:text-xs ${ui.textMuted} font-medium">
                                 ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> Project: ${item.projectTitle}</span>` : ''}
                                 ${!item.isProjectAction && item.category && item.category !== 'General' ? `<span class="flex items-center gap-1"><i data-lucide="tag" class="w-3 h-3"></i> Category: ${item.category}</span>` : ''}
                                 <span class="flex items-center gap-1 mt-0.5"><i data-lucide="calendar" class="w-3 h-3"></i> Date: ${item.date} ${item.time && !item.isAllDay ? `| ${item.time}` : ''}</span>
                              </div>
-                             <span class="text-[10px] font-bold px-2 py-1 rounded ${isDone ? 'bg-green-100 text-green-700' : (item.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600')}">${item.status}</span>
+                             <span class="text-[10px] font-bold px-2 py-1 rounded ${isDone ? 'bg-green-100/20 text-green-600' : (item.status === 'In Progress' ? 'bg-blue-100/20 text-blue-600' : `${ui.bgSecondary} ${ui.textMuted}`)}">${item.status}</span>
                         </div>
                     </div>`;
                 }).join('');
 
             return `
             <div class="space-y-6 lg:space-y-8 pb-10">
-                <!-- TODAY OVERVIEW -->
                 <section>
-                    <h2 class="text-xl lg:text-2xl font-bold mb-4 flex items-center gap-2">Today's Overview</h2>
+                    <h2 class="text-xl lg:text-2xl font-bold mb-4 flex items-center gap-2 ${ui.textMain}">Today's Overview</h2>
                     <div class="grid grid-cols-3 gap-3 lg:gap-6">
-                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
-                            <span class="text-3xl lg:text-5xl font-bold text-gray-800 mb-1">${todayTotal}</span>
-                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">Total Tasks</span>
+                        <div class="${ui.bgCard} border p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm flex flex-col justify-center items-center text-center">
+                            <span class="text-3xl lg:text-5xl font-bold ${ui.textMain} mb-1">${todayTotal}</span>
+                            <span class="text-xs lg:text-sm font-bold ${ui.textMuted} uppercase tracking-wider">Total Tasks</span>
                         </div>
-                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center">
+                        <div class="${ui.bgCard} border p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm flex flex-col justify-center items-center text-center">
                             <span class="text-3xl lg:text-5xl font-bold ${window.state.theme.mainText} mb-1">${todayDone}</span>
-                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">Done</span>
+                            <span class="text-xs lg:text-sm font-bold ${ui.textMuted} uppercase tracking-wider">Done</span>
                         </div>
-                        <div class="bg-white p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center items-center text-center border-b-4 border-b-orange-400">
+                        <div class="${ui.bgCard} border p-5 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm flex flex-col justify-center items-center text-center border-b-4 border-b-orange-500">
                             <span class="text-3xl lg:text-5xl font-bold text-orange-500 mb-1">${todayNotDone}</span>
-                            <span class="text-xs lg:text-sm font-bold text-gray-500 uppercase tracking-wider">To Do</span>
+                            <span class="text-xs lg:text-sm font-bold ${ui.textMuted} uppercase tracking-wider">To Do</span>
                         </div>
                     </div>
                 </section>
 
-                <!-- MONTH OVERVIEW (COLLAPSIBLE) -->
-                <section class="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 p-4 lg:p-6 transition-all">
+                <section class="${ui.bgCard} border rounded-2xl lg:rounded-3xl shadow-sm p-4 lg:p-6 transition-all">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div class="flex items-center gap-2 cursor-pointer" onclick="window.toggleMonthSummary()">
-                            <h2 class="text-base lg:text-lg font-bold text-gray-700">Month Overview</h2>
-                            <i data-lucide="${window.state.showMonthSummary ? 'chevron-up' : 'chevron-down'}" class="w-5 h-5 text-gray-400"></i>
+                            <h2 class="text-base lg:text-lg font-bold ${ui.textMain}">Month Overview</h2>
+                            <i data-lucide="${window.state.showMonthSummary ? 'chevron-up' : 'chevron-down'}" class="w-5 h-5 ${ui.textMuted}"></i>
                         </div>
                         <div class="flex gap-2 ${window.state.showMonthSummary ? '' : 'hidden'}">
-                            <select onchange="window.changeSummaryDate('month', this.value)" class="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:border-gray-400 text-xs font-medium cursor-pointer">${monthOpts}</select>
-                            <select onchange="window.changeSummaryDate('year', this.value)" class="appearance-none bg-gray-50 border border-gray-200 text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:border-gray-400 text-xs font-medium cursor-pointer">${yearOpts}</select>
+                            <select onchange="window.changeSummaryDate('month', this.value)" class="appearance-none ${ui.inputBg} py-1.5 px-3 rounded-lg border text-xs font-medium cursor-pointer outline-none">${monthOpts}</select>
+                            <select onchange="window.changeSummaryDate('year', this.value)" class="appearance-none ${ui.inputBg} py-1.5 px-3 rounded-lg border text-xs font-medium cursor-pointer outline-none">${yearOpts}</select>
                         </div>
                     </div>
                     
                     <div class="grid-cols-3 gap-3 lg:gap-4 mt-4 ${window.state.showMonthSummary ? 'grid' : 'hidden'}">
-                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
-                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthComp}</span>
-                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Completed</span>
+                        <div class="${ui.bgSecondary} border p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold ${ui.textMain} mb-1">${monthComp}</span>
+                            <span class="text-[10px] lg:text-xs font-medium ${ui.textMuted}">Completed</span>
                         </div>
-                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
-                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthToDo}</span>
-                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Pending</span>
+                        <div class="${ui.bgSecondary} border p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold ${ui.textMain} mb-1">${monthToDo}</span>
+                            <span class="text-[10px] lg:text-xs font-medium ${ui.textMuted}">Pending</span>
                         </div>
-                        <div class="bg-gray-50 p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
-                            <span class="text-xl lg:text-2xl font-bold text-gray-700 mb-1">${monthActiveProjects}</span>
-                            <span class="text-[10px] lg:text-xs font-medium text-gray-500">Active Projects</span>
+                        <div class="${ui.bgSecondary} border p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
+                            <span class="text-xl lg:text-2xl font-bold ${ui.textMain} mb-1">${monthActiveProjects}</span>
+                            <span class="text-[10px] lg:text-xs font-medium ${ui.textMuted}">Active Projects</span>
                         </div>
                     </div>
                 </section>
                 
-                <!-- TASK LIST OVERVIEW -->
                 <section>
-                    <div class="flex items-center gap-2 mb-4 border-b border-gray-200">
-                        <button onclick="window.setDashboardView('all')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 ${window.state.dashboardViewMode === 'all' ? `${window.state.theme.mainBorder} ${window.state.theme.mainText}` : 'border-transparent text-gray-400 hover:text-gray-600'}">All Tasks (${window.state.selectedDate})</button>
-                        <button onclick="window.setDashboardView('high')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 flex items-center gap-1 ${window.state.dashboardViewMode === 'high' ? `border-red-500 text-red-600` : 'border-transparent text-gray-400 hover:text-gray-600'}"><i data-lucide="flame" class="w-4 h-4"></i> High Priority</button>
+                    <div class="flex items-center gap-2 mb-4 border-b ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-200'}">
+                        <button onclick="window.setDashboardView('all')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 ${window.state.dashboardViewMode === 'all' ? `${window.state.theme.mainBorder} ${window.state.theme.mainText}` : `border-transparent ${ui.textMuted} hover:${ui.textMain}`}">All Tasks (${window.state.selectedDate})</button>
+                        <button onclick="window.setDashboardView('high')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 flex items-center gap-1 ${window.state.dashboardViewMode === 'high' ? `border-red-500 text-red-500` : `border-transparent ${ui.textMuted} hover:${ui.textMain}`}"><i data-lucide="flame" class="w-4 h-4"></i> High Priority</button>
                     </div>
                     <div class="space-y-3 lg:space-y-4">
                         ${listHTML}
@@ -480,11 +596,14 @@
         }
 
         function viewCalendar() {
+            const ui = uiConfig();
+            const PRIO = getPriorityColors(window.state.theme.isDark);
+            
             const daysInMonth = new Date(window.state.calYear, window.state.calMonth + 1, 0).getDate();
             const startDay = new Date(window.state.calYear, window.state.calMonth, 1).getDay();
             
             let calDaysHTML = '';
-            for(let i = 0; i < startDay; i++) calDaysHTML += `<div class="min-h-[60px] lg:min-h-[100px] border border-gray-50 rounded-lg lg:rounded-xl bg-gray-50/50 p-1 lg:p-2"></div>`;
+            for(let i = 0; i < startDay; i++) calDaysHTML += `<div class="min-h-[60px] lg:min-h-[100px] border rounded-lg lg:rounded-xl p-1 lg:p-2 ${ui.calEmpty}"></div>`;
             
             for(let day = 1; day <= daysInMonth; day++) {
                 const dateStr = `${window.state.calYear}-${String(window.state.calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -502,22 +621,24 @@
                 let taskDots = dayTasks.map(t => {
                     const proj = window.state.projects.find(p=>p.title === t.category);
                     const color = proj ? proj.color : 'bg-gray-500';
-                    return `<div class="flex items-center gap-1 overflow-hidden"><div class="w-1 lg:w-1.5 h-1 lg:h-1.5 rounded-full flex-shrink-0 ${color}"></div><span class="text-[8px] lg:text-[10px] font-medium truncate hidden sm:inline ${t.status === 'Done' ? 'line-through text-gray-400' : 'text-gray-700'}">${t.title}</span></div>`;
+                    return `<div class="flex items-center gap-1 overflow-hidden"><div class="w-1 lg:w-1.5 h-1 lg:h-1.5 rounded-full flex-shrink-0 ${color}"></div><span class="text-[8px] lg:text-[10px] font-medium truncate hidden sm:inline ${t.status === 'Done' ? `line-through ${ui.textMuted}` : ui.textMain}">${t.title}</span></div>`;
                 }).join('');
 
+                const selClass = isSelected ? `${window.state.theme.mainBorder} shadow-md ${window.state.theme.isDark ? 'bg-gray-800' : window.state.theme.lightBg}` : `${ui.bgCard} hover:${ui.bgSecondary}`;
+                const numClass = isToday ? 'bg-orange-500 text-white' : (isSelected ? `${window.state.theme.mainBg} text-white` : ui.textMuted);
+
                 calDaysHTML += `
-                <div onclick="window.selectDate('${dateStr}')" class="min-h-[60px] lg:min-h-[110px] border rounded-lg lg:rounded-xl relative transition cursor-pointer flex flex-col overflow-hidden ${isSelected ? `${window.state.theme.mainBorder} shadow-md ${window.state.theme.lightBg}` : 'border-gray-200 bg-white hover:border-gray-300'}">
+                <div onclick="window.selectDate('${dateStr}')" class="min-h-[60px] lg:min-h-[110px] border rounded-lg lg:rounded-xl relative transition cursor-pointer flex flex-col overflow-hidden ${selClass}">
                     <div class="w-full flex flex-col mb-0.5 lg:mb-1">${projBlocks}</div>
                     <div class="px-1 lg:px-2 pb-1 lg:pb-2 flex-1 flex flex-col">
                         <div class="flex justify-between items-center mb-0.5 lg:mb-1">
-                            <span class="text-[10px] lg:text-sm font-bold w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-orange-500 text-white' : (isSelected ? `${window.state.theme.mainBg} text-white` : 'text-gray-600')}">${day}</span>
+                            <span class="text-[10px] lg:text-sm font-bold w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full ${numClass}">${day}</span>
                         </div>
                         <div class="flex-1 overflow-hidden space-y-0.5 lg:space-y-1 mt-0.5 lg:mt-1">${taskDots}</div>
                     </div>
                 </div>`;
             }
 
-            // Agenda List with Status Dropdown
             let aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
             let aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
             let agendaCombined = [...aTasks, ...aActions];
@@ -526,29 +647,28 @@
             const STATUSES = ['To Do', 'In Progress', 'Done'];
             
             const agendaHTML = agendaCombined.length === 0 
-                ? `<p class="text-xs lg:text-sm text-gray-500 italic border border-dashed p-4 rounded-xl text-center">No schedule for this date.</p>`
+                ? `<p class="text-xs lg:text-sm ${ui.textMuted} italic border border-dashed border-gray-300 dark:border-gray-700 p-4 rounded-xl text-center">No schedule for this date.</p>`
                 : agendaCombined.map(item => {
                     const isDone = item.status === 'Done';
                     const proj = item.isProjectAction ? window.state.projects.find(p=>p.id === item.projectId) : window.state.projects.find(p=>p.title === item.category);
-                    const catColorStr = proj ? proj.color : 'bg-gray-300';
-                    const prioClasses = PRIORITY_COLORS[item.priority || 'Medium'];
-
+                    const catColorStr = proj ? proj.color : 'bg-gray-500';
+                    const prioClasses = PRIO[item.priority || 'Medium'];
                     const selectOptions = STATUSES.map(s => `<option value="${s}" ${item.status === s ? 'selected' : ''}>${s}</option>`).join('');
 
                     return `
-                    <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-center gap-3 lg:gap-4 transition-all relative overflow-hidden ${isDone ? 'bg-gray-50 border-gray-100 opacity-70' : 'bg-white shadow-sm'}">
+                    <div class="p-3 lg:p-4 rounded-xl lg:rounded-2xl border flex items-center gap-3 lg:gap-4 transition-all relative overflow-hidden ${isDone ? `${ui.bgSecondary} opacity-70` : ui.bgCard} shadow-sm">
                         <div class="absolute left-0 top-0 bottom-0 w-1 ${catColorStr}"></div>
                         <div class="flex-1 overflow-hidden cursor-pointer" onclick="window.openEditTaskModal(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction})">
                             <div class="flex justify-between items-start mb-1">
-                                <h4 class="font-bold text-sm lg:text-base truncate ${isDone ? 'line-through text-gray-500' : 'text-gray-800'}">${item.title || item.text}</h4>
-                                <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${item.priority || 'Medium'}</span>
+                                <h4 class="font-bold text-sm lg:text-base truncate ${isDone ? `line-through ${ui.textMuted}` : ui.textMain}">${item.title || item.text}</h4>
+                                <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold flex-shrink-0 ml-2 ${isDone ? `${ui.bgSecondary} ${ui.textMuted}` : prioClasses}">${item.priority || 'Medium'}</span>
                             </div>
-                            <div class="text-[10px] lg:text-xs text-gray-500 flex gap-3 truncate">
+                            <div class="text-[10px] lg:text-xs ${ui.textMuted} flex gap-3 truncate">
                                 ${item.time && !item.isAllDay ? `<span class="flex items-center gap-1 flex-shrink-0"><i data-lucide="clock" class="w-3 h-3"></i> ${item.time}</span>` : ''}
                                 ${item.isProjectAction ? `<span class="flex items-center gap-1"><i data-lucide="briefcase" class="w-3 h-3"></i> ${item.projectTitle}</span>` : ''}
                             </div>
                         </div>
-                        <select onchange="window.updateItemStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction}, this.value)" class="text-[10px] lg:text-xs font-bold px-2 py-1.5 rounded outline-none border focus:ring-1 focus:ring-gray-300 cursor-pointer ${isDone ? 'bg-green-100 text-green-700 border-green-200' : (item.status==='In Progress' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200')}">
+                        <select onchange="window.updateItemStatus(${item.isProjectAction ? item.projectId : null}, ${item.id}, ${item.isProjectAction}, this.value)" class="text-[10px] lg:text-xs font-bold px-2 py-1.5 rounded outline-none border focus:ring-1 focus:ring-gray-400 cursor-pointer ${isDone ? 'bg-green-100/20 text-green-600 border-green-200/20' : (item.status==='In Progress' ? 'bg-blue-100/20 text-blue-600 border-blue-200/20' : ui.inputBg)}">
                             ${selectOptions}
                         </select>
                     </div>`;
@@ -557,24 +677,24 @@
             return `
             <div class="flex flex-col gap-6 lg:gap-8 h-full">
                 <!-- Calendar Grid -->
-                <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 overflow-x-auto">
+                <div class="${ui.bgCard} p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border overflow-x-auto">
                     <div class="flex justify-between items-center mb-4 lg:mb-6 min-w-[300px]">
-                        <h2 class="text-xl lg:text-2xl font-bold">${MONTH_NAMES[window.state.calMonth]} ${window.state.calYear}</h2>
+                        <h2 class="text-xl lg:text-2xl font-bold ${ui.textMain}">${MONTH_NAMES[window.state.calMonth]} ${window.state.calYear}</h2>
                         <div class="flex gap-2">
-                            <button onclick="window.changeMonth(-1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${window.state.calYear === 2026 && window.state.calMonth === 5 ? 'disabled' : ''}><i data-lucide="chevron-left" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
-                            <button onclick="window.changeMonth(1)" class="p-1.5 lg:p-2 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50" ${window.state.calYear === 2030 && window.state.calMonth === 11 ? 'disabled' : ''}><i data-lucide="chevron-right" class="w-4 h-4 lg:w-5 lg:h-5 text-gray-600"></i></button>
+                            <button onclick="window.changeMonth(-1)" class="p-1.5 lg:p-2 border rounded-lg ${ui.inputBg} hover:${ui.bgSecondary} disabled:opacity-50"><i data-lucide="chevron-left" class="w-4 h-4 lg:w-5 lg:h-5 ${ui.textMuted}"></i></button>
+                            <button onclick="window.changeMonth(1)" class="p-1.5 lg:p-2 border rounded-lg ${ui.inputBg} hover:${ui.bgSecondary} disabled:opacity-50"><i data-lucide="chevron-right" class="w-4 h-4 lg:w-5 lg:h-5 ${ui.textMuted}"></i></button>
                         </div>
                     </div>
                     <div class="grid grid-cols-7 gap-1 lg:gap-2 mb-1 lg:mb-2 min-w-[300px]">
-                        ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="text-center text-[10px] lg:text-sm font-semibold text-gray-400 py-1 lg:py-2">${window.innerWidth < 640 ? d.charAt(0) : d}</div>`).join('')}
+                        ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="text-center text-[10px] lg:text-sm font-semibold ${ui.textMuted} py-1 lg:py-2">${window.innerWidth < 640 ? d.charAt(0) : d}</div>`).join('')}
                     </div>
                     <div class="grid grid-cols-7 gap-1 lg:gap-2 min-w-[300px]">${calDaysHTML}</div>
                 </div>
                 <!-- Agenda Schedule -->
-                <div class="bg-white p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 flex-1">
-                    <h2 class="text-lg lg:text-xl font-bold mb-4 lg:mb-6 flex items-center gap-2">
+                <div class="${ui.bgCard} p-4 lg:p-6 rounded-2xl lg:rounded-3xl shadow-sm border flex-1">
+                    <h2 class="text-lg lg:text-xl font-bold mb-4 lg:mb-6 flex items-center gap-2 ${ui.textMain}">
                         <i data-lucide="clock" class="w-5 h-5 lg:w-6 lg:h-6 ${window.state.theme.mainText}"></i>
-                        Schedule <span class="text-xs lg:text-sm font-normal text-gray-500">(${window.formatFullDate(window.state.selectedDate)})</span>
+                        Schedule <span class="text-xs lg:text-sm font-normal ${ui.textMuted}">(${window.formatFullDate(window.state.selectedDate)})</span>
                     </h2>
                     <div class="space-y-3 lg:space-y-4">
                         ${agendaHTML}
@@ -584,6 +704,9 @@
         }
 
         function viewDetails() {
+            const ui = uiConfig();
+            const PRIO = getPriorityColors(window.state.theme.isDark);
+
             const projectsHTML = window.state.projects.map(project => {
                 const catColor = project.color || 'bg-gray-500';
                 const KANBAN_COLS = ['To Do', 'In Progress', 'Done'];
@@ -591,39 +714,37 @@
                 const boardHTML = KANBAN_COLS.map(status => {
                     const colActions = project.actions.filter(a => a.status === status);
                     colActions.sort((a,b) => {
-                       const pA = PRIORITY_SCORES[a.priority || 'Medium'];
-                       const pB = PRIORITY_SCORES[b.priority || 'Medium'];
-                       if(pA !== pB) return pB - pA;
-                       return new Date(a.date) - new Date(b.date);
+                       const pA = PRIORITY_SCORES[a.priority || 'Medium']; const pB = PRIORITY_SCORES[b.priority || 'Medium'];
+                       if(pA !== pB) return pB - pA; return new Date(a.date) - new Date(b.date);
                     });
                     
                     const cardsHTML = colActions.map(action => {
                         const isDeadlineToday = action.date === TODAY && status !== 'Done';
                         const isOverdue = action.date < TODAY && status !== 'Done';
-                        const dateClass = isDeadlineToday ? 'text-red-600 font-bold' : (isOverdue ? 'text-red-800 font-bold' : 'text-gray-500');
-                        const prioClasses = PRIORITY_COLORS[action.priority || 'Medium'];
+                        const dateClass = isDeadlineToday ? 'text-red-500 font-bold' : (isOverdue ? 'text-red-700 font-bold' : ui.textMuted);
+                        const prioClasses = PRIO[action.priority || 'Medium'];
                         
                         return `
-                        <div draggable="true" ondragstart="window.dragStart(event, ${project.id}, ${action.id})" onclick="window.openEditTaskModal(${project.id}, ${action.id}, true)" class="kanban-card bg-white p-3 rounded-xl shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-300 transition group relative mb-3">
+                        <div draggable="true" ondragstart="window.dragStart(event, ${project.id}, ${action.id})" onclick="window.openEditTaskModal(${project.id}, ${action.id}, true)" class="kanban-card ${ui.bgCard} p-3 rounded-xl shadow-sm border hover:shadow-md transition group relative mb-3">
                             <div class="flex justify-between items-start mb-2">
-                                <span class="text-[10px] border px-1.5 py-0.5 rounded font-bold ${status === 'Done' ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${action.priority || 'Medium'}</span>
+                                <span class="text-[10px] border px-1.5 py-0.5 rounded font-bold ${status === 'Done' ? `${ui.bgSecondary} ${ui.textMuted}` : prioClasses}">${action.priority || 'Medium'}</span>
                                 <span class="text-[10px] ${dateClass}">${action.date}</span>
                             </div>
-                            <h5 class="text-sm font-bold leading-tight ${status === 'Done' ? 'line-through text-gray-400' : 'text-gray-800'}">${action.text}</h5>
-                            ${action.details ? `<p class="text-xs text-gray-500 mt-2 line-clamp-2">${action.details}</p>` : ''}
+                            <h5 class="text-sm font-bold leading-tight ${status === 'Done' ? `line-through ${ui.textMuted}` : ui.textMain}">${action.text}</h5>
+                            ${action.details ? `<p class="text-xs ${ui.textMuted} mt-2 line-clamp-2">${action.details}</p>` : ''}
                         </div>`;
                     }).join('');
                     
-                    const addTaskBtn = status === 'To Do' ? `<button onclick="window.openCreateTaskModal(${project.id})" class="mt-2 w-full py-2 bg-white border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-800 hover:border-gray-500 transition flex items-center justify-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i> Add Task</button>` : '';
+                    const addTaskBtn = status === 'To Do' ? `<button onclick="window.openCreateTaskModal(${project.id})" class="mt-2 w-full py-2 border border-dashed rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 ${ui.bgCard} ${ui.textMuted} hover:${ui.textMain}"><i data-lucide="plus" class="w-3 h-3"></i> Add Task</button>` : '';
 
                     return `
-                    <div class="flex-1 min-w-[260px] bg-gray-50 rounded-2xl p-3 border border-gray-100 flex flex-col" ondragover="window.allowDrop(event)" ondrop="window.dropCard(event, ${project.id}, '${status}')">
+                    <div class="flex-1 min-w-[260px] ${ui.kanbanCol} rounded-2xl p-3 border flex flex-col" ondragover="window.allowDrop(event)" ondrop="window.dropCard(event, ${project.id}, '${status}')">
                         <div class="flex justify-between items-center mb-3 px-1">
-                            <h4 class="font-bold text-gray-700 text-sm flex items-center gap-2">
+                            <h4 class="font-bold ${ui.textMain} text-sm flex items-center gap-2">
                                 <div class="w-2 h-2 rounded-full ${status === 'Done' ? 'bg-green-500' : (status === 'In Progress' ? 'bg-blue-500' : 'bg-gray-400')}"></div>
                                 ${status}
                             </h4>
-                            <span class="bg-gray-200 text-gray-600 text-xs font-bold px-2 py-0.5 rounded-full">${colActions.length}</span>
+                            <span class="${ui.bgCard} ${ui.textMuted} text-xs font-bold px-2 py-0.5 border rounded-full">${colActions.length}</span>
                         </div>
                         <div class="flex-1 min-h-[150px]">
                             ${cardsHTML}
@@ -635,28 +756,28 @@
                 const isCollapsed = project.isCollapsed;
 
                 return `
-                <div class="bg-white rounded-3xl p-5 lg:p-6 shadow-sm border border-gray-100 relative overflow-hidden transition-all">
+                <div class="${ui.bgCard} rounded-3xl p-5 lg:p-6 shadow-sm border relative overflow-hidden transition-all">
                     <div class="absolute top-0 left-0 w-full h-1.5 ${catColor}"></div>
                     <div class="flex flex-col sm:flex-row sm:justify-between items-start gap-4 ${isCollapsed ? 'mb-0' : 'mb-6'} mt-2">
                         <div class="flex items-start gap-3 w-full">
-                            <button onclick="window.toggleProjectCollapse(${project.id})" class="mt-1 p-1 bg-gray-50 hover:bg-gray-200 rounded text-gray-500 transition">
+                            <button onclick="window.toggleProjectCollapse(${project.id})" class="mt-1 p-1 ${ui.bgSecondary} hover:${ui.bgCard} border border-transparent hover:border-gray-400 rounded ${ui.textMuted} transition">
                                 <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
                             </button>
                             <div class="flex-1">
                                 <div class="flex items-center gap-2 lg:gap-3">
-                                    <h3 class="text-xl lg:text-2xl font-bold text-gray-800">${project.title}</h3>
-                                    <button onclick="window.openProjectSettings(${project.id})" class="p-1.5 text-gray-400 hover:${window.state.theme.mainText} hover:${window.state.theme.lightBg} rounded-lg transition" title="Edit Project">
+                                    <h3 class="text-xl lg:text-2xl font-bold ${ui.textMain}">${project.title}</h3>
+                                    <button onclick="window.openProjectSettings(${project.id})" class="p-1.5 ${ui.iconColor} hover:${window.state.theme.mainText} rounded-lg transition" title="Edit Project">
                                         <i data-lucide="edit-2" class="w-4 h-4 lg:w-5 lg:h-5"></i>
                                     </button>
                                 </div>
-                                <p class="text-xs lg:text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-2">
+                                <p class="text-xs lg:text-sm ${ui.textMuted} mt-1 flex flex-wrap items-center gap-2">
                                     <span class="flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3 lg:w-4 lg:h-4"></i> ${window.formatFullDate(project.startDate)} - ${project.endDate ? window.formatFullDate(project.endDate) : 'Ongoing'}</span>
                                 </p>
                             </div>
                         </div>
                         <div class="text-left sm:text-right hidden sm:block">
                             <span class="text-xl lg:text-2xl font-bold ${window.state.theme.mainText}">${project.progress}%</span>
-                            <p class="text-[10px] lg:text-xs text-gray-400">Completed</p>
+                            <p class="text-[10px] lg:text-xs ${ui.textMuted}">Completed</p>
                         </div>
                     </div>
                     
@@ -669,8 +790,8 @@
             return `
             <div class="space-y-6">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
-                    <h2 class="text-xl lg:text-2xl font-bold">Project Details</h2>
-                    <button onclick="window.openCreateProjectModal()" class="${window.state.theme.mainBg} text-white px-4 py-2 rounded-xl text-sm font-semibold ${window.state.theme.hoverBg} transition flex items-center justify-center gap-2">
+                    <h2 class="text-xl lg:text-2xl font-bold ${ui.textMain}">Project Details</h2>
+                    <button onclick="window.openCreateProjectModal()" class="${window.state.theme.mainBg} text-white px-4 py-2 rounded-xl text-sm font-bold ${window.state.theme.hoverBg} transition flex items-center justify-center gap-2">
                         <i data-lucide="plus" class="w-4 h-4"></i> New Project
                     </button>
                 </div>
@@ -679,11 +800,13 @@
         }
 
         function viewSettings() {
+            const ui = uiConfig();
+            
             const themesHTML = THEMES.map(t => `
-                <div onclick="window.changeTheme('${t.id}')" class="min-w-[140px] flex-shrink-0 border-2 rounded-xl p-3 lg:p-4 cursor-pointer transition-all snap-start ${window.state.theme.id === t.id ? `${t.mainBorder} ${t.lightBg} shadow-md` : 'border-gray-200 hover:border-gray-300'}">
+                <div onclick="window.changeTheme('${t.id}')" class="min-w-[140px] flex-shrink-0 border-2 rounded-xl p-3 lg:p-4 cursor-pointer transition-all snap-start ${window.state.theme.id === t.id ? `${t.mainBorder} ${window.state.theme.isDark ? 'bg-gray-800' : t.lightBg} shadow-md` : `${ui.bgCard} border-transparent hover:${ui.bgSecondary}`}">
                     <div class="flex items-center gap-2 lg:gap-3 mb-2">
                         <div class="w-5 h-5 lg:w-6 lg:h-6 rounded-full ${t.mainBg}"></div>
-                        <span class="font-bold text-sm lg:text-base">${t.name}</span>
+                        <span class="font-bold text-sm lg:text-base ${ui.textMain}">${t.name}</span>
                     </div>
                     <div class="flex gap-1">
                         <div class="w-full h-1.5 lg:h-2 rounded-full ${t.mainBg}"></div>
@@ -693,40 +816,70 @@
             `).join('');
 
             return `
-            <div class="bg-white rounded-2xl lg:rounded-3xl shadow-sm border border-gray-100 overflow-hidden max-w-3xl">
-                <div class="p-6 lg:p-8 border-b border-gray-100">
-                    <h2 class="text-xl lg:text-2xl font-bold mb-1 lg:mb-2">Preferences</h2>
-                    <p class="text-gray-500 text-xs lg:text-sm">Manage your profile and dashboard settings.</p>
+            <div class="${ui.bgCard} border rounded-2xl lg:rounded-3xl shadow-sm overflow-hidden max-w-3xl">
+                <div class="p-6 lg:p-8 border-b ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'}">
+                    <h2 class="text-xl lg:text-2xl font-bold mb-1 lg:mb-2 ${ui.textMain}">Preferences</h2>
+                    <p class="text-xs lg:text-sm ${ui.textMuted}">Manage your profile, theme, and notifications.</p>
                 </div>
                 <div class="p-6 lg:p-8 space-y-8 lg:space-y-10">
                     
-                    <div class="flex flex-col sm:flex-row items-center gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                        <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white shadow-sm object-cover">
+                    <!-- Profile -->
+                    <div class="flex flex-col sm:flex-row items-center gap-6 ${ui.bgSecondary} p-6 rounded-2xl border">
+                        <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white dark:border-gray-700 shadow-sm object-cover">
                         <div class="flex-1 text-center sm:text-left">
-                            <h3 class="font-bold text-lg text-gray-800">${window.state.currentUser?.displayName || 'User'}</h3>
-                            <p class="text-sm text-gray-500 mb-3">${window.state.currentUser?.email || 'No email'}</p>
-                            <button onclick="window.logout()" class="px-4 py-2 bg-white border border-gray-200 text-red-600 font-bold rounded-lg text-sm hover:bg-red-50 transition shadow-sm">Sign Out</button>
+                            <h3 class="font-bold text-lg ${ui.textMain}">${window.state.currentUser?.displayName || 'User'}</h3>
+                            <p class="text-sm ${ui.textMuted} mb-3">${window.state.currentUser?.email || 'No email'}</p>
+                            <button onclick="window.logout()" class="px-4 py-2 ${ui.bgCard} border text-red-500 font-bold rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition shadow-sm">Sign Out</button>
                         </div>
                     </div>
 
                     <div>
-                        <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><i data-lucide="user" class="w-4 h-4"></i> Custom Display Name</label>
+                        <label class="block text-xs lg:text-sm font-bold mb-2 flex items-center gap-2 ${ui.textMain}"><i data-lucide="user" class="w-4 h-4"></i> Custom Display Name</label>
                         <div class="flex flex-col sm:flex-row gap-3">
-                            <input type="text" id="settings-username" value="${window.state.userName}" class="w-full md:w-1/2 border border-gray-200 rounded-xl px-4 py-2 lg:py-3 focus:outline-none focus:ring-2 focus:ring-gray-200 text-base lg:text-lg font-medium" />
+                            <input type="text" id="settings-username" value="${window.state.userName}" class="w-full md:w-1/2 border rounded-xl px-4 py-2 lg:py-3 font-medium outline-none ${ui.inputBg}" />
                             <button onclick="window.saveSettingsName()" class="${window.state.theme.mainBg} text-white px-6 py-2 lg:py-3 rounded-xl font-bold ${window.state.theme.hoverBg} transition">Save Name</button>
                         </div>
                     </div>
                     
                     <div>
-                        <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-3 lg:mb-4 flex items-center gap-2"><i data-lucide="palette" class="w-4 h-4"></i> Dashboard Theme</label>
+                        <label class="block text-xs lg:text-sm font-bold mb-3 lg:mb-4 flex items-center gap-2 ${ui.textMain}"><i data-lucide="palette" class="w-4 h-4"></i> Dashboard Theme</label>
                         <div class="flex gap-3 lg:gap-4 overflow-x-auto pb-4 snap-x scrollbar-hide">
                             ${themesHTML}
                         </div>
                     </div>
 
-                    <div class="border-t border-gray-100 pt-8">
-                        <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2 flex items-center gap-2"><i data-lucide="instagram" class="w-4 h-4"></i> Contact</label>
-                        <p class="text-sm text-gray-600">Hit me up on Instagram <a href="https://instagram.com/netalennn" target="_blank" class="font-bold ${window.state.theme.mainText} hover:underline">@netalennn</a></p>
+                    <!-- NEW: Telegram Configuration -->
+                    <div class="border-t ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} pt-8">
+                        <div class="flex items-center gap-2 mb-2">
+                            <i data-lucide="send" class="w-4 h-4 text-blue-500"></i>
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain}">Telegram Daily Reminder</label>
+                        </div>
+                        <p class="text-xs lg:text-sm ${ui.textMuted} mb-4">Get a daily recap of your pending tasks. Ensure you have started a chat with your Telegram Bot first.</p>
+                        
+                        <div class="space-y-4 max-w-md">
+                            <div>
+                                <label class="block text-[10px] lg:text-xs font-bold ${ui.textMuted} mb-1">Your Telegram Chat ID</label>
+                                <input type="text" id="settings-telegram-id" value="${window.state.telegramChatId}" placeholder="e.g. 123456789" class="w-full border rounded-xl px-4 py-2 lg:py-2.5 font-medium outline-none ${ui.inputBg}" />
+                            </div>
+                            
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border rounded-xl ${ui.bgSecondary}">
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="settings-telegram-auto" ${window.state.autoReminderEnabled ? 'checked' : ''} class="w-4 h-4 rounded cursor-pointer">
+                                    <label for="settings-telegram-auto" class="text-sm font-bold ${ui.textMain} cursor-pointer">Enable Auto-Reminder</label>
+                                </div>
+                                <p class="text-[10px] ${ui.textMuted} sm:w-1/2">If enabled, bot will send 1 message automatically every day when you open this web.</p>
+                            </div>
+
+                            <div class="flex flex-col sm:flex-row gap-3 pt-2">
+                                <button onclick="window.saveTelegramSettings()" class="${window.state.theme.mainBg} text-white px-6 py-2.5 rounded-xl font-bold ${window.state.theme.hoverBg} transition text-sm">Save Preferences</button>
+                                <button id="btn-telegram-test" onclick="window.sendTelegramReminder(true)" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold transition text-sm flex items-center justify-center gap-2"><i data-lucide="bell" class="w-4 h-4"></i> Test Manual Send</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} pt-8">
+                        <label class="block text-xs lg:text-sm font-bold mb-2 flex items-center gap-2 ${ui.textMain}"><i data-lucide="instagram" class="w-4 h-4"></i> Contact</label>
+                        <p class="text-sm ${ui.textMuted}">Hit me up on Instagram <a href="https://instagram.com/netalennn" target="_blank" class="font-bold ${window.state.theme.mainText} hover:underline">@netalennn</a></p>
                     </div>
                 </div>
             </div>`;
@@ -736,6 +889,7 @@
         // 6. MODALS RENDERING (Unified Forms)
         // ==========================================
         function renderUnifiedTaskModal() {
+            const ui = uiConfig();
             const data = window.state.taskModalData;
             if (!data) return '';
             const isEditing = data.isEdit;
@@ -749,21 +903,21 @@
             const priorityOpts = PRIORITIES.map(p => `<option value="${p}" ${data.priority == p ? 'selected' : ''}>${p}</option>`).join('');
 
             return `
-            <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-                <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-                    <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-xl font-bold">${isEditing ? 'Task Details' : 'Create New Task'}</h3>
-                        <button onclick="window.closeTaskModal()" class="text-gray-400 hover:text-gray-700 bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
+            <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+                <div class="${ui.bgCard} rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] border">
+                    <div class="flex justify-between items-center p-4 lg:p-6 border-b ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0">
+                        <h3 class="text-base lg:text-xl font-bold ${ui.textMain}">${isEditing ? 'Task Details' : 'Create New Task'}</h3>
+                        <button onclick="window.closeTaskModal()" class="${ui.textMuted} hover:${ui.textMain} ${ui.bgSecondary} p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="p-4 lg:p-6 overflow-y-auto scrollbar-hide space-y-4 lg:space-y-5 flex-1">
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Task Title</label>
-                            <input type="text" id="utm-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="What needs to be done?" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 focus:outline-none focus:ring-1 focus:ring-gray-300 text-sm lg:text-lg font-medium" />
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2">Task Title</label>
+                            <input type="text" id="utm-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="What needs to be done?" class="w-full border rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-lg font-medium outline-none ${ui.inputBg}" />
                         </div>
                         
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="briefcase" class="w-3 h-3"></i> Project (Acts as Category)</label>
-                            <select id="utm-project" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white focus:ring-1 focus:ring-gray-300" ${isEditing ? 'disabled' : ''}>
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="briefcase" class="w-3 h-3"></i> Project (Acts as Category)</label>
+                            <select id="utm-project" class="w-full border rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none ${ui.inputBg}" ${isEditing ? 'disabled' : ''}>
                                 <option value="">-- General / No Project --</option>
                                 ${projOpts}
                             </select>
@@ -771,89 +925,90 @@
 
                         <div class="grid grid-cols-2 gap-3 lg:gap-4">
                             <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="loader-2" class="w-3 h-3"></i> Status</label>
-                                <select id="utm-status" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white font-medium">
+                                <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="loader-2" class="w-3 h-3"></i> Status</label>
+                                <select id="utm-status" class="w-full border rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm font-bold outline-none ${ui.inputBg}">
                                     ${statusOpts}
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="alert-circle" class="w-3 h-3"></i> Priority Level</label>
-                                <select id="utm-priority" class="w-full border border-gray-200 rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm outline-none bg-white font-medium">
+                                <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="alert-circle" class="w-3 h-3"></i> Priority Level</label>
+                                <select id="utm-priority" class="w-full border rounded-xl px-3 py-2 lg:py-3 text-xs lg:text-sm font-bold outline-none ${ui.inputBg}">
                                     ${priorityOpts}
                                 </select>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-3 lg:gap-4 bg-gray-50 p-3 lg:p-4 rounded-xl lg:rounded-2xl border border-gray-100">
+                        <div class="grid grid-cols-2 gap-3 lg:gap-4 ${ui.bgSecondary} p-3 lg:p-4 rounded-xl lg:rounded-2xl border">
                             <div class="col-span-2 lg:col-span-1">
-                                <label class="block text-[10px] lg:text-xs font-bold text-gray-500 mb-1">Start Date / Deadline</label>
-                                <input type="date" id="utm-date" value="${data.date}" class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white" />
+                                <label class="block text-[10px] lg:text-xs font-bold ${ui.textMuted} mb-1">Start Date / Deadline</label>
+                                <input type="date" id="utm-date" value="${data.date}" class="w-full border rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none ${ui.inputBg}" />
                             </div>
-                            <div class="col-span-2 flex flex-col justify-end">
-                                <div class="flex items-center justify-between mb-1">
-                                    <label class="block text-[10px] lg:text-xs font-bold text-gray-500">Time</label>
+                            <div class="col-span-2 lg:col-span-1 flex flex-col justify-end">
+                                <div class="flex items-center justify-between mb-1 mt-2 lg:mt-0">
+                                    <label class="block text-[10px] lg:text-xs font-bold ${ui.textMuted}">Time</label>
                                     <div class="flex items-center gap-1.5">
                                         <input type="checkbox" id="utm-allday" ${data.isAllDay ? 'checked' : ''} onchange="window.toggleDOMAllDay(this.checked)" class="w-3 h-3 rounded" />
-                                        <label for="utm-allday" class="text-[10px] lg:text-xs text-gray-600">All Day</label>
+                                        <label for="utm-allday" class="text-[10px] lg:text-xs ${ui.textMuted}">All Day</label>
                                     </div>
                                 </div>
-                                <input type="time" id="utm-time" value="${data.time || ''}" ${data.isAllDay ? 'disabled' : ''} class="w-full border border-gray-200 rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none bg-white transition-opacity ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" />
+                                <input type="time" id="utm-time" value="${data.time || ''}" ${data.isAllDay ? 'disabled' : ''} class="w-full border rounded-lg px-2 lg:px-3 py-1.5 lg:py-2 text-xs lg:text-sm outline-none transition-opacity ${ui.inputBg} ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" />
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="align-left" class="w-3 h-3"></i> Details & Description</label>
-                            <textarea id="utm-details" rows="4" placeholder="Add detailed instructions, links, or notes..." class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-sm outline-none focus:ring-1 focus:ring-gray-300 resize-none">${data.details || ''}</textarea>
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2 flex items-center gap-1.5 lg:gap-2"><i data-lucide="align-left" class="w-3 h-3"></i> Details & Description</label>
+                            <textarea id="utm-details" rows="4" placeholder="Add detailed instructions, links, or notes..." class="w-full border rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-xs lg:text-sm outline-none resize-none ${ui.inputBg}">${data.details || ''}</textarea>
                         </div>
 
                     </div>
-                    <div class="p-4 lg:p-6 border-t border-gray-100 flex gap-3 flex-shrink-0 bg-white">
-                        ${isEditing ? `<button onclick="window.deleteUnifiedTask()" class="flex-shrink-0 p-3 lg:p-3.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition" title="Delete Task"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
-                        <button onclick="window.saveUnifiedTask()" class="flex-1 bg-gray-900 text-white font-bold py-3 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition text-sm lg:text-base">Save Task Details</button>
+                    <div class="p-4 lg:p-6 border-t ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} flex gap-3 flex-shrink-0 ${ui.bgCard}">
+                        ${isEditing ? `<button onclick="window.deleteUnifiedTask()" class="flex-shrink-0 p-3 lg:p-3.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-xl transition border border-red-500/20" title="Delete Task"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
+                        <button onclick="window.saveUnifiedTask()" class="flex-1 ${window.state.theme.isDark ? 'bg-white text-gray-900 hover:bg-gray-200' : 'bg-gray-900 text-white hover:bg-gray-800'} font-bold py-3 lg:py-3.5 rounded-xl transition text-sm lg:text-base">Save Task</button>
                     </div>
                 </div>
             </div>`;
         }
 
         function renderProjectSettingsModal() {
+            const ui = uiConfig();
             const data = window.state.projectForm;
             if(!data) return '';
             
-            const colorBtns = TAILWIND_COLORS.map(color => `<button type="button" onclick="window.setProjectColorDOM('${color}')" data-color="${color}" class="color-btn w-6 h-6 lg:w-8 lg:h-8 rounded-full flex-shrink-0 ${color} ${data.color === color ? 'ring-2 ring-offset-2 ring-gray-800' : ''} transition-all"></button>`).join('');
+            const colorBtns = TAILWIND_COLORS.map(color => `<button type="button" onclick="window.setProjectColorDOM('${color}')" data-color="${color}" class="color-btn w-6 h-6 lg:w-8 lg:h-8 rounded-full flex-shrink-0 ${color} ${data.color === color ? (window.state.theme.isDark ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white' : 'ring-2 ring-offset-2 ring-gray-800') : ''} transition-all"></button>`).join('');
 
             return `
-            <div class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
-                <div class="bg-white rounded-2xl lg:rounded-3xl shadow-xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
-                    <div class="flex justify-between items-center p-4 lg:p-6 border-b border-gray-100 flex-shrink-0">
-                        <h3 class="text-base lg:text-xl font-bold">${window.state.isEditingProject ? 'Edit Project Settings' : 'Create New Project'}</h3>
-                        <button onclick="window.closeProjectModal()" class="text-gray-400 hover:bg-gray-100 p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
+            <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
+                <div class="${ui.bgCard} border rounded-2xl lg:rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+                    <div class="flex justify-between items-center p-4 lg:p-6 border-b ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} flex-shrink-0">
+                        <h3 class="text-base lg:text-xl font-bold ${ui.textMain}">${window.state.isEditingProject ? 'Edit Project' : 'Create New Project'}</h3>
+                        <button onclick="window.closeProjectModal()" class="${ui.textMuted} hover:${ui.textMain} ${ui.bgSecondary} p-1.5 lg:p-2 rounded-full"><i data-lucide="x" class="w-4 h-4 lg:w-5 lg:h-5"></i></button>
                     </div>
                     <div class="overflow-y-auto p-4 lg:p-6 scrollbar-hide flex-1 space-y-4 lg:space-y-6">
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Project Title</label>
-                            <input type="text" id="pf-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="e.g., Q4 Campaign" class="w-full border border-gray-200 rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-lg font-medium outline-none" />
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2">Project Title</label>
+                            <input type="text" id="pf-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="e.g., Q4 Campaign" class="w-full border rounded-xl px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-lg font-medium outline-none ${ui.inputBg}" />
                         </div>
                         <div class="grid grid-cols-2 gap-3 lg:gap-4">
                             <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">Start Date</label>
-                                <input type="date" id="pf-start" value="${data.startDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
+                                <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2">Start Date</label>
+                                <input type="date" id="pf-start" value="${data.startDate}" class="w-full border rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none ${ui.inputBg}" />
                             </div>
                             <div>
-                                <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-1 lg:mb-2">End Date</label>
-                                <input type="date" id="pf-end" value="${data.endDate}" class="w-full border border-gray-200 rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none" />
+                                <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-1 lg:mb-2">End Date</label>
+                                <input type="date" id="pf-end" value="${data.endDate}" class="w-full border rounded-xl px-2 lg:px-4 py-2 lg:py-2.5 text-xs lg:text-sm outline-none ${ui.inputBg}" />
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs lg:text-sm font-bold text-gray-700 mb-2">Project Color</label>
+                            <label class="block text-xs lg:text-sm font-bold ${ui.textMain} mb-2">Project Color</label>
                             <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x p-2">
                                 ${colorBtns}
                             </div>
                         </div>
                     </div>
-                    <div class="p-4 lg:p-6 border-t border-gray-100 bg-white flex flex-shrink-0 gap-3">
-                        ${window.state.isEditingProject ? `<button onclick="window.deleteProject()" class="p-3 lg:p-3.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition" title="Delete Project"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
+                    <div class="p-4 lg:p-6 border-t ${window.state.theme.isDark ? 'border-gray-800' : 'border-gray-100'} ${ui.bgCard} flex flex-shrink-0 gap-3">
+                        ${window.state.isEditingProject ? `<button onclick="window.deleteProject()" class="p-3 lg:p-3.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 rounded-xl transition" title="Delete Project"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
                         <button onclick="window.saveProject()" class="flex-1 ${window.state.theme.mainBg} text-white font-bold py-2.5 lg:py-3.5 rounded-xl ${window.state.theme.hoverBg} transition text-sm lg:text-base">
-                            ${window.state.isEditingProject ? 'Save Project Settings' : 'Create Project'}
+                            ${window.state.isEditingProject ? 'Save Project' : 'Create Project'}
                         </button>
                     </div>
                 </div>
@@ -863,12 +1018,12 @@
         // ==========================================
         // 7. EVENT HANDLERS & LOGIC
         // ==========================================
-        window.setActiveTab = (tabId) => { window.state.activeTab = tabId; window.renderApp(); };
-        window.saveSettingsName = () => { window.state.userName = document.getElementById('settings-username').value; window.saveToStorage(); window.renderApp(); };
-        window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(); window.renderApp(); };
+        window.setActiveTab = (tabId) => { window.state.activeTab = tabId; window.renderApp(); window.refreshTab(); };
+        window.saveSettingsName = () => { window.state.userName = document.getElementById('settings-username').value; window.saveToStorage(true); };
+        window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(true); };
         window.handleSearch = (val) => { window.state.searchQuery = val; window.refreshTab(); };
         
-        window.changeSummaryMonth = (val) => { const [m, y] = val.split('-'); window.state.calMonth = parseInt(m); window.state.calYear = parseInt(y); window.refreshTab(); };
+        window.changeSummaryMonth = (val) => { window.state.calMonth = parseInt(val); window.refreshTab(); };
         window.changeSummaryDate = (type, val) => {
             if(type === 'month') window.state.calMonth = parseInt(val);
             else if(type === 'year') window.state.calYear = parseInt(val);
@@ -888,7 +1043,7 @@
 
         window.toggleProjectCollapse = (id) => {
             window.state.projects = window.state.projects.map(p => p.id === id ? {...p, isCollapsed: !p.isCollapsed} : p);
-            window.saveToStorage(); window.refreshTab();
+            window.saveToStorage(false); window.refreshTab();
         };
 
         window.updateItemStatus = (projectId, taskId, isAction, newStatus) => {
@@ -902,10 +1057,9 @@
             } else {
                 window.state.tasks = window.state.tasks.map(t => t.id === taskId ? { ...t, status: newStatus, done: newStatus === 'Done' } : t);
             }
-            window.saveToStorage(); window.refreshTab();
+            window.saveToStorage(false); window.refreshTab();
         };
 
-        // KANBAN DRAG AND DROP
         window.dragStart = (e, pId, aId) => { e.dataTransfer.setData('text/plain', JSON.stringify({ pId, aId })); };
         window.allowDrop = (e) => { e.preventDefault(); };
         window.dropCard = (e, targetPId, newStatus) => {
@@ -917,11 +1071,10 @@
                         const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = p.actions.length === 0 ? 0 : Math.round((comp / p.actions.length) * 100);
                     } return p;
                 });
-                window.saveToStorage(); window.refreshTab();
+                window.saveToStorage(false); window.refreshTab();
             }
         };
 
-        // UNIFIED TASK MODAL
         window.openCreateTaskModal = (prefillProjectId = '') => { 
             window.state.taskModalData = { id: null, title: '', projectId: prefillProjectId, status: 'To Do', priority: 'Medium', date: TODAY, time: '', isAllDay: false, details: '', category: '', isEdit: false }; 
             window.state.isTaskModalOpen = true; window.renderModals(); 
@@ -936,6 +1089,7 @@
         window.closeTaskModal = () => { window.state.isTaskModalOpen = false; window.renderModals(); };
         
         window.toggleDOMAllDay = (checked) => {
+            window.state.taskModalData.isAllDay = checked;
             const timeInput = document.getElementById('utm-time');
             if (!timeInput) return;
             if(checked) {
@@ -951,11 +1105,10 @@
             const d = window.state.taskModalData; const title = document.getElementById('utm-title').value; if (!title) return;
             const projId = document.getElementById('utm-project').value, status = document.getElementById('utm-status').value, priority = document.getElementById('utm-priority').value, date = document.getElementById('utm-date').value, details = document.getElementById('utm-details').value;
             
-            const isAllDayEl = document.getElementById('utm-allday'); const isAllDay = isAllDayEl ? isAllDayEl.checked : false;
+            const isAllDay = d.isAllDay;
             const timeEl = document.getElementById('utm-time'); const time = isAllDay ? '' : (timeEl ? timeEl.value : '');
             const isDone = status === 'Done';
             
-            // Auto category based on project
             const projObj = projId ? window.state.projects.find(p => p.id === parseInt(projId)) : null;
             const categoryName = projObj ? projObj.title : 'General';
 
@@ -978,7 +1131,7 @@
                     });
                 } else window.state.tasks.push({ id: Date.now(), title, date, time, priority, status, details, category: categoryName, done: isDone, isAllDay });
             }
-            window.state.isTaskModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
+            window.state.isTaskModalOpen = false; window.saveToStorage(false); window.renderModals(); window.refreshTab();
         };
 
         window.deleteUnifiedTask = () => {
@@ -991,7 +1144,7 @@
                     } return p;
                 });
             } else window.state.tasks = window.state.tasks.filter(t => t.id !== d.id);
-            window.state.isTaskModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
+            window.state.isTaskModalOpen = false; window.saveToStorage(false); window.renderModals(); window.refreshTab();
         };
 
         window.openCreateProjectModal = () => { window.state.projectForm = { id: null, title: '', startDate: TODAY, endDate: '', color: TAILWIND_COLORS[0] }; window.state.isEditingProject = false; window.state.isProjectModalOpen = true; window.renderModals(); };
@@ -1000,9 +1153,13 @@
         
         window.setProjectColorDOM = (color) => {
             window.state.projectForm.color = color;
+            const dark = window.state.theme.isDark;
             document.querySelectorAll('.color-btn').forEach(btn => {
-                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-gray-800');
-                if(btn.dataset.color === color) btn.classList.add('ring-2', 'ring-offset-2', 'ring-gray-800');
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-offset-gray-900', 'ring-white', 'ring-gray-800');
+                if(btn.dataset.color === color) {
+                    if(dark) btn.classList.add('ring-2', 'ring-offset-2', 'ring-offset-gray-900', 'ring-white');
+                    else btn.classList.add('ring-2', 'ring-offset-2', 'ring-gray-800');
+                }
             });
         };
 
@@ -1012,10 +1169,20 @@
             const color = window.state.projectForm.color;
             if (window.state.isEditingProject) window.state.projects = window.state.projects.map(p => p.id === window.state.projectForm.id ? { ...p, title, startDate, endDate, color } : p);
             else window.state.projects.push({ id: Date.now(), title, startDate, endDate, color, isCollapsed: false, progress: 0, actions: [] });
-            window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.saveToStorage(); window.renderModals(); window.refreshTab();
+            window.state.isProjectModalOpen = false; window.state.isEditingProject = false; window.saveToStorage(false); window.renderModals(); window.refreshTab();
         };
         
-        window.deleteProject = () => { window.state.projects = window.state.projects.filter(p => p.id !== window.state.projectForm.id); window.state.isProjectModalOpen = false; window.saveToStorage(); window.renderModals(); window.refreshTab(); };
+        window.deleteProject = () => { window.state.projects = window.state.projects.filter(p => p.id !== window.state.projectForm.id); window.state.isProjectModalOpen = false; window.saveToStorage(false); window.renderModals(); window.refreshTab(); };
+
+        // Save Telegram Settings explicitly
+        window.saveTelegramSettings = () => {
+            const id = document.getElementById('settings-telegram-id').value.trim();
+            const auto = document.getElementById('settings-telegram-auto').checked;
+            window.state.telegramChatId = id;
+            window.state.autoReminderEnabled = auto;
+            window.saveToStorage(false);
+            alert("Telegram Settings Saved!");
+        };
 
     </script>
 </body>
