@@ -137,6 +137,7 @@
             dashboardViewMode: 'all', showMonthSummary: false,
             
             // Telegram Preferences
+            telegramUsername: '',
             telegramChatId: '',
             autoReminderEnabled: false,
             lastReminderSentDate: '', // To prevent spamming everyday
@@ -170,6 +171,7 @@
                         window.state.userName = data.userName || user.displayName || 'User';
                         window.state.theme = THEMES.find(t=>t.id === data.themeId) || THEMES[0];
                         
+                        window.state.telegramUsername = data.telegramUsername || '';
                         window.state.telegramChatId = data.telegramChatId || '';
                         window.state.autoReminderEnabled = data.autoReminderEnabled || false;
                         window.state.lastReminderSentDate = data.lastReminderSentDate || '';
@@ -200,6 +202,7 @@
                     const dataToSave = {
                         userName: window.state.userName,
                         themeId: window.state.theme.id,
+                        telegramUsername: window.state.telegramUsername,
                         telegramChatId: window.state.telegramChatId,
                         autoReminderEnabled: window.state.autoReminderEnabled,
                         lastReminderSentDate: window.state.lastReminderSentDate,
@@ -298,8 +301,8 @@
         // 4. TELEGRAM LOGIC
         // ==========================================
         window.sendTelegramReminder = async function(isManual = false) {
-            if (!window.state.telegramChatId) {
-                if(isManual) alert("Please enter your Telegram Chat ID in the Settings first.");
+            if (!window.state.telegramUsername) {
+                if(isManual) alert("Mohon masukkan Username Telegram Anda di menu Settings terlebih dahulu.");
                 return;
             }
 
@@ -307,60 +310,110 @@
             let originalText = '';
             if(btn && isManual) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Sending...`;
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Memproses...`;
                 btn.disabled = true;
             }
 
             try {
-                // Collect Pending Tasks for Today
-                const todaysTasks = window.state.tasks.filter(t => t.date === TODAY && t.status !== 'Done');
-                const todaysActions = window.state.projects.flatMap(p => 
-                    p.actions.filter(a => a.date === TODAY && a.status !== 'Done').map(a => ({...a, projectTitle: p.title}))
+                // 1. CARI CHAT ID BERDASARKAN USERNAME
+                let chatId = window.state.telegramChatId;
+                if(isManual) { 
+                    const resUpdate = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates`);
+                    const dataUpdate = await resUpdate.json();
+                    
+                    let foundId = null;
+                    const inputUsername = window.state.telegramUsername.replace('@', '').toLowerCase();
+
+                    if (dataUpdate.ok && dataUpdate.result) {
+                        for (let i = dataUpdate.result.length - 1; i >= 0; i--) {
+                            const msg = dataUpdate.result[i].message;
+                            if (msg && msg.from && msg.from.username && msg.from.username.toLowerCase() === inputUsername) {
+                                foundId = msg.chat.id;
+                                break;
+                            }
+                        }
+                    }
+
+                    if(foundId) {
+                        chatId = foundId;
+                        window.state.telegramChatId = foundId;
+                        window.saveToStorage(false);
+                    } else if (!chatId) {
+                        alert("ERROR: Bot belum pernah menerima chat dari Anda.\n\nBuka Telegram Anda, cari Bot Anda, lalu kirim pesan apa saja (misal: 'Halo'). Setelah itu, klik tombol Test ini lagi.");
+                        if(btn && isManual) { btn.innerHTML = originalText; btn.disabled = false; lucide.createIcons(); }
+                        return;
+                    }
+                }
+
+                if(!chatId) return;
+
+                // 2. KUMPULKAN TASK HARI INI & PROJECT MINGGU INI
+                const todayObj = new Date(TODAY);
+                const nextWeekObj = new Date(todayObj);
+                nextWeekObj.setDate(todayObj.getDate() + 7);
+                const NEXT_WEEK_STR = nextWeekObj.getFullYear() + '-' + String(nextWeekObj.getMonth() + 1).padStart(2, '0') + '-' + String(nextWeekObj.getDate()).padStart(2, '0');
+                
+                const pendingTasks = window.state.tasks.filter(t => t.status !== 'Done');
+                const pendingActions = window.state.projects.flatMap(p => 
+                    p.actions.filter(a => a.status !== 'Done').map(a => ({...a, projectTitle: p.title}))
                 );
                 
-                const allPending = [...todaysTasks, ...todaysActions];
+                const allPending = [...pendingTasks, ...pendingActions];
+                let todays = allPending.filter(i => i.date === TODAY);
+                let thisWeeks = allPending.filter(i => i.date > TODAY && i.date <= NEXT_WEEK_STR);
                 
-                // Format Telegram Message
-                let message = `🔔 *nytask! Daily Reminder* 🔔\n\n`;
-                message += `📅 *Date:* ${window.formatFullDate(TODAY)}\n`;
+                // 3. FORMAT PESAN TELEGRAM
+                let message = `🔔 *nytask! Daily & Weekly Update* 🔔\n\n`;
+                message += `📅 *Tanggal:* ${window.formatFullDate(TODAY)}\n`;
                 message += `👤 *User:* ${window.state.userName}\n\n`;
 
-                if (allPending.length === 0) {
-                    message += `🎉 Awesome! You have *0 pending tasks* for today. Take a break!`;
+                if (todays.length === 0 && thisWeeks.length === 0) {
+                    message += `🎉 Awesome! Tidak ada tugas hari ini maupun jadwal project minggu ini. Waktunya bersantai! ☕`;
                 } else {
-                    message += `You have *${allPending.length} pending task(s)* due today:\n\n`;
-                    allPending.forEach((item, index) => {
+                    // SEKSI HARI INI
+                    message += `🔥 *TUGAS HARI INI (${todays.length}):*\n`;
+                    if(todays.length === 0) message += `_Tidak ada deadline hari ini._\n`;
+                    todays.forEach((item, index) => {
                         const prioIcon = item.priority === 'High' ? '🔴' : (item.priority === 'Medium' ? '🟡' : '🔵');
                         const projCatInfo = item.projectTitle ? `[Project: ${item.projectTitle}]` : (item.category && item.category!=='General' ? `[${item.category}]` : '');
                         message += `${index + 1}. ${prioIcon} *${item.title || item.text}*\n   ${projCatInfo} ${item.time && !item.isAllDay ? `🕒 ${item.time}` : '🕒 All Day'}\n`;
                     });
+
+                    // SEKSI MINGGU INI
+                    message += `\n📆 *PROJECT MINGGU INI (${thisWeeks.length}):*\n`;
+                    if(thisWeeks.length === 0) message += `_Tidak ada agenda dalam 7 hari ke depan._\n`;
+                    thisWeeks.sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((item) => {
+                        const prioIcon = item.priority === 'High' ? '🔴' : (item.priority === 'Medium' ? '🟡' : '🔵');
+                        const projCatInfo = item.projectTitle ? `[${item.projectTitle}]` : '';
+                        message += `• ${item.date} : ${prioIcon} ${item.title || item.text} ${projCatInfo}\n`;
+                    });
+
                     message += `\n💪 Let's get them done!`;
                 }
 
-                // Send via Telegram API
+                // 4. KIRIM API
                 const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: window.state.telegramChatId, text: message, parse_mode: 'Markdown' })
+                    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'Markdown' })
                 });
 
                 const result = await response.json();
                 
                 if (result.ok) {
-                    if(isManual) alert("Reminder sent successfully to your Telegram!");
-                    // Update last sent date to prevent re-sending today
+                    if(isManual) alert("Reminder berhasil dikirim ke Telegram Anda!");
                     if(!isManual) {
                         window.state.lastReminderSentDate = TODAY;
-                        window.saveToStorage(false); // background save
+                        window.saveToStorage(false);
                     }
                 } else {
-                    if(isManual) alert("Failed to send reminder. Check if your Chat ID is correct.");
+                    if(isManual) alert("Gagal mengirim! Pastikan Anda sudah memulai chat ke Bot Anda di Telegram.");
                 }
 
             } catch (error) {
                 console.error("Telegram API Error:", error);
-                if(isManual) alert("Something went wrong. Please try again.");
+                if(isManual) alert("Gagal menyambung ke server Telegram. Periksa koneksi Anda.");
             } finally {
                 if(btn && isManual) {
                     btn.innerHTML = originalText; btn.disabled = false; lucide.createIcons();
@@ -854,12 +907,12 @@
                             <i data-lucide="send" class="w-4 h-4 text-blue-500"></i>
                             <label class="block text-xs lg:text-sm font-bold ${ui.textMain}">Telegram Daily Reminder</label>
                         </div>
-                        <p class="text-xs lg:text-sm ${ui.textMuted} mb-4">Get a daily recap of your pending tasks. Ensure you have started a chat with your Telegram Bot first.</p>
+                        <p class="text-xs lg:text-sm ${ui.textMuted} mb-4">Dapatkan rekap tugas hari ini & jadwal project minggu ini otomatis.<br><b>Wajib:</b> Anda harus chat bot Anda dulu di Telegram sebelum menyimpan!</p>
                         
                         <div class="space-y-4 max-w-md">
                             <div>
-                                <label class="block text-[10px] lg:text-xs font-bold ${ui.textMuted} mb-1">Your Telegram Chat ID</label>
-                                <input type="text" id="settings-telegram-id" value="${window.state.telegramChatId}" placeholder="e.g. 123456789" class="w-full border rounded-xl px-4 py-2 lg:py-2.5 font-medium outline-none ${ui.inputBg}" />
+                                <label class="block text-[10px] lg:text-xs font-bold ${ui.textMuted} mb-1">Telegram Username Anda</label>
+                                <input type="text" id="settings-telegram-username" value="${window.state.telegramUsername || ''}" placeholder="contoh: netalennn (tanpa @)" class="w-full border rounded-xl px-4 py-2 lg:py-2.5 font-medium outline-none ${ui.inputBg}" />
                             </div>
                             
                             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border rounded-xl ${ui.bgSecondary}">
@@ -1176,12 +1229,14 @@
 
         // Save Telegram Settings explicitly
         window.saveTelegramSettings = () => {
-            const id = document.getElementById('settings-telegram-id').value.trim();
+            const username = document.getElementById('settings-telegram-username').value.trim();
             const auto = document.getElementById('settings-telegram-auto').checked;
-            window.state.telegramChatId = id;
+            window.state.telegramUsername = username.replace('@', ''); // Otomatis hapus @ jika tertulis
             window.state.autoReminderEnabled = auto;
             window.saveToStorage(false);
-            alert("Telegram Settings Saved!");
+            
+            // Langsung otomatis trigger Test Send untuk mencari Chat ID barunya
+            window.sendTelegramReminder(true);
         };
 
     </script>
