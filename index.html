@@ -13,10 +13,8 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
-        .kanban-card { cursor: grab; }
-        .kanban-card:active { cursor: grabbing; }
-        /* Grid background for Weekly Calendar */
-        .time-grid-bg { background-image: linear-gradient(to bottom, #f3f4f6 1px, transparent 1px); background-size: 100% 60px; }
+        .kanban-card, .project-card { cursor: grab; }
+        .kanban-card:active, .project-card:active { cursor: grabbing; }
     </style>
 </head>
 <body class="bg-slate-50 font-sans overflow-hidden text-gray-800">
@@ -98,6 +96,11 @@
         ];
 
         const PRIORITY_SCORES = { 'High': 3, 'Medium': 2, 'Low': 1 };
+        const PRIORITY_COLORS = { 
+            'High': 'bg-red-100 text-red-700 border-red-200', 
+            'Medium': 'bg-orange-100 text-orange-700 border-orange-200', 
+            'Low': 'bg-blue-100 text-blue-700 border-blue-200' 
+        };
         
         window.formatFullDate = (dateStr) => {
             if (!dateStr) return '';
@@ -110,7 +113,7 @@
             if (!dateStr) return '';
             const parts = dateStr.split('-');
             if(parts.length !== 3) return dateStr;
-            return `${parts[2]}-${parts[1]}-${parts[0].slice(-2)}`;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
         };
 
         window.getSoftColorClass = (bgClass) => {
@@ -129,14 +132,15 @@
             dashboardViewMode: 'all', 
             showMonthSummary: false,
             
-            calendarViewMode: 'month', // 'month' or 'week'
-            agendaStartDate: TODAY, // For 7-day schedule
+            calendarViewMode: 'month',
+            agendaStartDate: TODAY, 
             
             tasks: [], 
             projects: [],
             
             calMonth: dateObj.getMonth(), 
             calYear: dateObj.getFullYear(), 
+            selectedDate: TODAY,
             
             isTaskModalOpen: false, taskModalData: null,
             isProjectModalOpen: false, projectForm: null,
@@ -147,7 +151,7 @@
 
         let unsubscribeSnapshot = null;
 
-        // AUTHENTICATION LISTENER
+        // AUTHENTICATION
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 window.state.currentUser = user;
@@ -164,12 +168,15 @@
                         const data = docSnap.data();
                         window.state.userName = data.userName || user.displayName || 'User';
                         window.state.theme = THEMES.find(t=>t.id === data.themeId) || THEMES[0];
-                        window.state.tasks = data.tasks || [];
-                        window.state.projects = data.projects || [];
+                        
+                        // Prevent overwriting with empty arrays if not present
+                        if(data.tasks) window.state.tasks = data.tasks;
+                        if(data.projects) window.state.projects = data.projects;
+                        
                         window.state.telegramUsername = data.telegramUsername || '';
                         window.state.enableAutoReminder = data.enableAutoReminder || false;
                         
-                        // Default values for projects
+                        // Normalize projects
                         window.state.projects.forEach((p, idx) => { 
                             if(typeof p.isCollapsed === 'undefined') p.isCollapsed = false; 
                             if(typeof p.order === 'undefined') p.order = idx;
@@ -235,7 +242,7 @@
             if(!window.state.currentUser) return;
             const content = document.getElementById('tab-content');
             const mainEl = document.getElementById('main-scroll-area');
-            const scrollPos = mainEl ? mainEl.scrollTop : 0; // Save scroll position
+            const scrollPos = mainEl ? mainEl.scrollTop : 0; 
             
             applyThemeBody();
             if (content) {
@@ -245,7 +252,6 @@
                 else if (window.state.activeTab === 'Settings') content.innerHTML = viewSettings();
                 lucide.createIcons();
                 
-                // Restore scroll position smoothly
                 requestAnimationFrame(() => {
                     const newMain = document.getElementById('main-scroll-area');
                     if(newMain) newMain.scrollTop = scrollPos;
@@ -272,30 +278,25 @@
             }
         }
 
-        function getCardClasses(isDark) {
-            return isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-100 shadow-sm';
-        }
-        function getBgClasses(isDark) {
-            return isDark ? 'bg-gray-800 text-gray-200' : 'bg-gray-50 text-gray-700';
-        }
-        function getTextClasses(isDark) {
-            return isDark ? 'text-gray-300' : 'text-gray-500';
-        }
-        function getHeadingClasses(isDark) {
-            return isDark ? 'text-white' : 'text-gray-800';
+        function getCardClasses(isDark) { return isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-100 shadow-sm'; }
+        function getTextClasses(isDark) { return isDark ? 'text-gray-300' : 'text-gray-500'; }
+        function getHeadingClasses(isDark) { return isDark ? 'text-white' : 'text-gray-800'; }
+        function getSidebarClasses() {
+            const t = window.state.theme;
+            return t.isDark ? 'bg-gray-900 border-r border-gray-800 text-gray-300' : `${t.mainBg} text-white`;
         }
 
-        // Layout
+        // Layout Components
         function renderMobileHeader() {
             return `
-            <header class="lg:hidden ${window.state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
+            <header class="lg:hidden ${window.state.theme.isDark ? 'bg-gray-900 border-b border-gray-800' : window.state.theme.mainBg} text-white p-4 rounded-b-3xl flex justify-between items-center z-20 shadow-md flex-shrink-0">
                 <div class="flex items-center gap-3">
                     <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-10 h-10 rounded-full border-2 border-white/20 bg-black/20 object-cover">
                     <div>
                         <div class="flex items-center gap-1.5 h-5">
                             <img src="logo.png" alt="nytask!" class="h-4 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-sm tracking-tight&quot;>nytask!</span>'">
                         </div>
-                        <p class="text-[10px] mt-0.5 ${window.state.theme.accentText}">Hello, ${window.state.userName}</p>
+                        <p class="text-[10px] mt-0.5 ${window.state.theme.isDark ? 'text-gray-400' : window.state.theme.accentText}">Hello, ${window.state.userName}</p>
                     </div>
                 </div>
             </header>`;
@@ -303,21 +304,32 @@
 
         function renderDesktopSidebar() {
             const isDark = window.state.theme.isDark;
-            const navItems = TABS.map(t => `
-                <button onclick="window.setActiveTab('${t.id}')" class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${window.state.activeTab === t.id ? 'bg-white/10 font-medium shadow-sm text-white' : 'text-white/70 hover:bg-white/5 hover:text-white'}">
+            const sideCls = getSidebarClasses();
+            const navItems = TABS.map(t => {
+                const isActive = window.state.activeTab === t.id;
+                let activeStyle = '';
+                if(isActive) {
+                    activeStyle = isDark ? 'bg-gray-800 font-bold text-white shadow-sm' : 'bg-white/10 font-bold shadow-sm text-white';
+                } else {
+                    activeStyle = isDark ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : 'text-white/70 hover:bg-white/5 hover:text-white';
+                }
+
+                return `
+                <button onclick="window.setActiveTab('${t.id}')" class="w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${activeStyle}">
                     <i data-lucide="${t.icon}" class="w-5 h-5"></i> ${t.name}
                 </button>
-            `).join('');
+                `;
+            }).join('');
 
             return `
-            <aside class="hidden lg:flex w-64 ${window.state.theme.mainBg} text-white flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300 border-r ${isDark ? 'border-gray-800' : 'border-transparent'}">
+            <aside class="hidden lg:flex w-64 ${sideCls} flex-shrink-0 flex-col rounded-r-3xl z-10 h-full transition-colors duration-300">
                 <div class="p-8 pb-4">
                     <div class="flex items-center gap-3 mb-10 h-8">
                         <img src="logo.png" alt="nytask!" class="h-7 object-contain" onerror="this.onerror=null; this.outerHTML='<span class=&quot;font-extrabold text-2xl tracking-tight&quot;>nytask!</span>'">
                     </div>
                     <div class="flex flex-col items-center mb-6">
                         <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white/20 bg-black/20 object-cover mb-4 shadow-lg">
-                        <h2 class="font-semibold text-lg">${window.state.userName}</h2>
+                        <h2 class="font-semibold text-lg ${isDark ? 'text-white' : 'text-white'}">${window.state.userName}</h2>
                     </div>
                 </div>
                 <nav class="flex-1 px-4 space-y-2">${navItems}</nav>
@@ -340,7 +352,6 @@
             const title = window.state.activeTab === 'Dashboard' ? `Hello, ${window.state.userName}` : TABS.find(t=>t.id === window.state.activeTab).name;
             return `
             <main id="main-scroll-area" class="flex-1 p-4 lg:p-10 pb-28 lg:pb-10 overflow-y-auto scrollbar-hide flex flex-col relative">
-                <!-- Desktop Header -->
                 <header class="hidden lg:flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 flex-shrink-0">
                     <div>
                         <h1 class="text-3xl font-bold tracking-tight ${getHeadingClasses(isDark)}">${title}</h1>
@@ -348,7 +359,6 @@
                     </div>
                 </header>
 
-                <!-- Mobile Header -->
                 <div class="lg:hidden mb-4 space-y-2">
                     <div class="flex justify-between items-end">
                         <h1 class="text-2xl font-bold tracking-tight ${getHeadingClasses(isDark)}">${window.state.activeTab === 'Dashboard' ? 'Overview' : title}</h1>
@@ -363,14 +373,14 @@
                     ${window.state.activeTab === 'Settings' ? viewSettings() : ''}
                 </div>
 
-                <button onclick="window.openCreateTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 ${window.state.theme.mainBg} text-white rounded-full flex items-center justify-center shadow-xl ${window.state.theme.hoverBg} hover:scale-105 transition-all z-30 group" title="Add New Task">
+                <button onclick="window.openCreateTaskModal()" class="fixed bottom-20 right-4 lg:bottom-10 lg:right-10 w-14 h-14 lg:w-16 lg:h-16 ${isDark ? window.state.theme.mainBg : window.state.theme.mainBg} text-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 transition-all z-30 group" title="Add New Task">
                     <i data-lucide="plus" class="w-6 h-6 lg:w-8 lg:h-8 group-hover:rotate-90 transition-transform duration-300"></i>
                 </button>
             </main>`;
         }
 
         // ==========================================
-        // COUNTDOWN LOGIC FOR HIGH PRIORITY
+        // TABS: DASHBOARD
         // ==========================================
         function getUrgencyHTML(dateStr, isDone) {
             if(isDone) return `<span class="text-gray-400 font-bold ml-2 text-[10px]">(Done)</span>`;
@@ -385,12 +395,9 @@
             if (diffDays < 0) return `<span class="text-red-600 font-bold ml-2 text-xs">Overdue</span>`;
             if (diffDays === 0) return `<span class="text-red-600 font-bold ml-2 text-xs">Today</span>`;
             if (diffDays <= 3) return `<span class="text-red-600 font-bold ml-2 text-xs">${diffDays} days left</span>`;
-            return `<span class="text-gray-500 ml-2 text-xs">${diffDays} days left</span>`;
+            return `<span class="text-gray-500 ml-2 text-xs font-normal">${diffDays} days left</span>`;
         }
 
-        // ==========================================
-        // TABS: DASHBOARD
-        // ==========================================
         function viewDashboard() {
             const isDark = window.state.theme.isDark;
             const cardCls = getCardClasses(isDark);
@@ -421,8 +428,8 @@
 
             let displayList = [];
             if (window.state.dashboardViewMode === 'all') {
-                const aTasks = window.state.tasks;
-                const aActions = window.state.projects.flatMap(p => p.actions.map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
+                const aTasks = window.state.tasks.filter(t => t.date === window.state.selectedDate);
+                const aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === window.state.selectedDate).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
                 displayList = [...aTasks, ...aActions];
             } else {
                 const hpTasks = window.state.tasks.filter(t => t.priority === 'High' && t.status !== 'Done');
@@ -459,10 +466,10 @@
 
             return `
             <div class="space-y-6 lg:space-y-8 pb-10">
-                <!-- TODAY OVERVIEW -->
                 <section>
                     <h2 class="text-xl lg:text-2xl font-bold mb-4 flex items-center gap-2 ${headCls}">Today's Overview</h2>
                     <div class="grid grid-cols-3 gap-3 lg:gap-6">
+                        <!-- Ordered: To Do, Completed, Total -->
                         <div class="${cardCls} p-5 lg:p-6 rounded-2xl lg:rounded-3xl border flex flex-col justify-center items-center text-center border-b-4 border-b-orange-400">
                             <span class="text-3xl lg:text-5xl font-bold text-orange-500 mb-1">${todayNotDone}</span>
                             <span class="text-xs lg:text-sm font-bold ${textCls} uppercase tracking-wider">To Do</span>
@@ -478,7 +485,6 @@
                     </div>
                 </section>
 
-                <!-- MONTH OVERVIEW -->
                 <section class="${cardCls} rounded-2xl lg:rounded-3xl border p-4 lg:p-6 transition-all">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div class="flex items-center gap-2 cursor-pointer select-none" onclick="window.toggleMonthSummary()">
@@ -492,6 +498,7 @@
                     </div>
                     
                     <div class="grid-cols-3 gap-3 lg:gap-4 mt-4 ${window.state.showMonthSummary ? 'grid' : 'hidden'}">
+                        <!-- Ordered: Pending, Completed, Active Projects -->
                         <div class="${isDark?'bg-gray-700':'bg-gray-50'} p-3 lg:p-4 rounded-xl flex flex-col justify-center items-center">
                             <span class="text-xl lg:text-2xl font-bold ${headCls} mb-1">${monthToDo}</span>
                             <span class="text-[10px] lg:text-xs font-medium ${textCls}">Pending</span>
@@ -507,10 +514,9 @@
                     </div>
                 </section>
                 
-                <!-- TASK LIST -->
                 <section>
                     <div class="flex items-center gap-2 mb-4 border-b ${isDark?'border-gray-700':'border-gray-200'}">
-                        <button onclick="window.setDashboardView('all')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 ${window.state.dashboardViewMode === 'all' ? `${window.state.theme.mainBorder} ${window.state.theme.mainText}` : `border-transparent ${textCls} hover:${headCls}`}">All Tasks</button>
+                        <button onclick="window.setDashboardView('all')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 ${window.state.dashboardViewMode === 'all' ? `${window.state.theme.mainBorder} ${window.state.theme.mainText}` : `border-transparent ${textCls} hover:${headCls}`}">All Tasks (${window.formatDDMMYY(window.state.selectedDate)})</button>
                         <button onclick="window.setDashboardView('high')" class="px-4 py-2 text-sm font-bold transition-all border-b-2 flex items-center gap-1 ${window.state.dashboardViewMode === 'high' ? `border-red-500 text-red-500` : `border-transparent ${textCls} hover:text-red-400`}"><i data-lucide="flame" class="w-4 h-4"></i> High Priority</button>
                     </div>
                     <div class="space-y-3 lg:space-y-4">
@@ -545,18 +551,16 @@
                     const cardsHTML = colActions.map(action => {
                         const isDone = status === 'Done';
                         
-                        // Check if LATE
                         let lateBadge = '';
                         if (!isDone && action.date && action.date < TODAY) {
                             lateBadge = `<span class="text-red-500 font-bold text-[9px] border border-red-200 bg-red-50 px-1 rounded ml-2">LATE</span>`;
                         }
+                        const prioClasses = PRIORITY_COLORS[action.priority || 'Medium'];
 
                         return `
                         <div draggable="true" ondragstart="window.dragStart(event, ${project.id}, ${action.id})" class="kanban-card ${isDark?'bg-gray-700 border-gray-600':'bg-white border-gray-200'} p-3 rounded-xl shadow-sm border transition relative mb-3 group cursor-pointer" onclick="window.openEditTaskModal(${project.id}, ${action.id}, true)">
                             <div class="flex justify-between items-start mb-2">
                                 <span class="text-[10px] ${textCls} font-medium flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i> ${window.formatDDMMYY(action.date)} ${lateBadge}</span>
-                                
-                                <!-- Inline Status Dropdown -->
                                 <select onchange="window.updateItemStatus(${project.id}, ${action.id}, true, this.value)" onclick="event.stopPropagation()" class="text-[9px] font-bold px-1 py-0.5 rounded outline-none border focus:ring-1 cursor-pointer ${isDone ? 'bg-green-100 text-green-700 border-green-200' : (status==='In Progress' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-700 border-gray-200')}">
                                     <option value="To Do" ${status==='To Do'?'selected':''}>To Do</option>
                                     <option value="In Progress" ${status==='In Progress'?'selected':''}>In Progress</option>
@@ -564,7 +568,9 @@
                                 </select>
                             </div>
                             <h5 class="text-sm font-bold leading-tight ${isDone ? 'line-through text-gray-500' : headCls}">${action.text}</h5>
-                            ${action.details ? `<p class="text-xs ${textCls} mt-2 line-clamp-2">${action.details}</p>` : ''}
+                            <div class="flex items-center gap-2 mt-2">
+                                <span class="text-[9px] border px-1.5 py-0.5 rounded font-bold ${isDone ? 'bg-gray-100 text-gray-400 border-gray-200' : prioClasses}">${action.priority || 'Medium'}</span>
+                            </div>
                         </div>`;
                     }).join('');
                     
@@ -589,22 +595,15 @@
                 const isCollapsed = project.isCollapsed;
 
                 return `
-                <div class="${cardCls} rounded-3xl p-4 lg:p-6 border relative overflow-hidden transition-all flex flex-col gap-4">
+                <div draggable="true" ondragstart="window.dragStartProject(event, ${project.id})" ondragover="window.allowDrop(event)" ondrop="window.dropProject(event, ${project.id})" class="project-card ${cardCls} rounded-3xl p-4 lg:p-6 border relative overflow-hidden transition-all flex flex-col gap-4">
                     <div class="absolute top-0 left-0 w-full h-1.5 ${catColor}"></div>
-                    
                     <div class="flex items-start gap-3 w-full mt-2">
-                        <!-- Project Reorder Buttons -->
-                        <div class="flex flex-col items-center justify-center ${textCls} bg-black/5 rounded p-0.5">
-                            <button onclick="window.moveProject(-1, ${project.id})" class="hover:${headCls}"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
-                            <i data-lucide="grip-vertical" class="w-3 h-3 opacity-50 my-1"></i>
-                            <button onclick="window.moveProject(1, ${project.id})" class="hover:${headCls}"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+                        <div class="flex flex-col items-center justify-center ${textCls} p-1 opacity-50 hover:opacity-100 cursor-grab" title="Drag to reorder">
+                            <i data-lucide="grip-vertical" class="w-5 h-5"></i>
                         </div>
-                        
-                        <!-- Collapse Toggle -->
                         <button onclick="window.toggleProjectCollapse(${project.id})" class="mt-1 p-1 ${isDark?'bg-gray-700 hover:bg-gray-600':'bg-gray-100 hover:bg-gray-200'} rounded ${textCls} transition">
                             <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
                         </button>
-                        
                         <div class="flex-1 flex justify-between items-start">
                             <div>
                                 <div class="flex items-center gap-2 lg:gap-3">
@@ -620,7 +619,6 @@
                             </div>
                         </div>
                     </div>
-                    
                     <div class="flex gap-4 overflow-x-auto pb-2 snap-x ${isCollapsed ? 'hidden' : ''}">
                         ${boardHTML}
                     </div>
@@ -647,14 +645,12 @@
             const cardCls = getCardClasses(isDark);
             const textCls = getTextClasses(isDark);
             const headCls = getHeadingClasses(isDark);
-
             const vMode = window.state.calendarViewMode;
 
-            // Header Buttons
             const toggleHTML = `
             <div class="flex bg-black/5 p-1 rounded-lg">
-                <button onclick="window.setCalendarMode('month')" class="px-3 py-1.5 text-xs font-bold rounded-md transition ${vMode==='month' ? 'bg-white shadow text-gray-800' : textCls}">Month</button>
-                <button onclick="window.setCalendarMode('week')" class="px-3 py-1.5 text-xs font-bold rounded-md transition ${vMode==='week' ? 'bg-white shadow text-gray-800' : textCls}">Week</button>
+                <button onclick="window.setCalendarMode('month')" class="px-3 py-1.5 text-xs font-bold rounded-md transition ${vMode==='month' ? (isDark?'bg-gray-700 text-white':'bg-white shadow text-gray-800') : textCls}">Month</button>
+                <button onclick="window.setCalendarMode('week')" class="px-3 py-1.5 text-xs font-bold rounded-md transition ${vMode==='week' ? (isDark?'bg-gray-700 text-white':'bg-white shadow text-gray-800') : textCls}">Week</button>
             </div>`;
 
             if (vMode === 'month') {
@@ -664,7 +660,6 @@
                         <h2 class="text-xl lg:text-2xl font-bold ${headCls}">Monthly Calendar</h2>
                         ${toggleHTML}
                     </div>
-                    <!-- Calendar Grid -->
                     <div class="${cardCls} p-4 lg:p-6 rounded-2xl lg:rounded-3xl border overflow-x-auto">
                         <div class="flex justify-between items-center mb-4 lg:mb-6 min-w-[300px]">
                             <h3 class="text-lg lg:text-xl font-bold ${headCls}">${MONTH_NAMES[window.state.calMonth]} ${window.state.calYear}</h3>
@@ -681,21 +676,8 @@
                         </div>
                     </div>
                     
-                    <!-- 7 Days Agenda -->
                     <div class="${cardCls} p-4 lg:p-6 rounded-2xl lg:rounded-3xl border flex-1">
-                        <div class="flex justify-between items-center mb-4 lg:mb-6 border-b pb-4 ${isDark?'border-gray-700':'border-gray-100'}">
-                            <h2 class="text-lg lg:text-xl font-bold flex items-center gap-2 ${headCls}">
-                                <i data-lucide="calendar-days" class="w-5 h-5 lg:w-6 lg:h-6 ${window.state.theme.mainText}"></i>
-                                Schedule (7 Days)
-                            </h2>
-                            <div class="flex gap-2">
-                                <button onclick="window.shiftAgenda(-7)" class="p-1.5 border rounded-lg ${textCls} hover:bg-black/5" title="Previous 7 Days"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>
-                                <button onclick="window.shiftAgenda(7)" class="p-1.5 border rounded-lg ${textCls} hover:bg-black/5" title="Next 7 Days"><i data-lucide="arrow-right" class="w-4 h-4"></i></button>
-                            </div>
-                        </div>
-                        <div class="space-y-6">
-                            ${render7DaysAgenda(isDark, textCls, headCls)}
-                        </div>
+                        ${render7DaysAgenda(isDark, textCls, headCls)}
                     </div>
                 </div>`;
             } else {
@@ -712,7 +694,6 @@
             }
         }
 
-        // MONTHLY GRID HELPER
         function renderMonthlyGrid(isDark, textCls, headCls) {
             const daysInMonth = new Date(window.state.calYear, window.state.calMonth + 1, 0).getDate();
             const startDay = new Date(window.state.calYear, window.state.calMonth, 1).getDay();
@@ -728,27 +709,32 @@
                 const dayTasks = window.state.tasks.filter(t => t.date === dateStr);
                 const activeProjects = window.state.projects.filter(p => dateStr >= p.startDate && (!p.endDate || dateStr <= p.endDate));
 
-                // Soft Pills for Projects
+                // Indicators ABOVE date
                 let projBlocks = activeProjects.map(p => {
-                    const softColor = window.getSoftColorClass(p.color);
-                    return `<div class="${softColor} bg-opacity-30 text-[7px] sm:text-[9px] px-1 py-0.5 sm:truncate font-bold rounded mb-[2px] leading-none"><span class="hidden sm:inline">${p.title}</span></div>`;
+                    const color = p.color || 'bg-gray-500';
+                    return `<div class="w-1.5 h-1.5 rounded-full ${color}" title="${p.title}"></div>`;
                 }).join('');
 
-                // Soft Pills for Tasks
-                let taskBlocks = dayTasks.map(t => {
-                    const proj = window.state.projects.find(p=>p.title === t.category);
-                    const softColor = window.getSoftColorClass(proj ? proj.color : 'bg-gray-500');
-                    const strike = t.status === 'Done' ? 'line-through opacity-50' : '';
-                    return `<div class="${softColor} bg-opacity-40 text-[7px] sm:text-[9px] px-1 py-0.5 sm:truncate font-bold rounded mb-[2px] leading-none ${strike}"><span class="hidden sm:inline">${t.title}</span></div>`;
-                }).join('');
+                // Task indicators BELOW date
+                let taskBlocks = '';
+                if(dayTasks.length > 3) {
+                    taskBlocks = `<div class="bg-gray-200 text-gray-700 text-[8px] px-1 py-0.5 rounded font-bold text-center mt-1">+${dayTasks.length} Tasks</div>`;
+                } else {
+                    taskBlocks = dayTasks.map(t => {
+                        const proj = window.state.projects.find(p=>p.title === t.category);
+                        const softColor = window.getSoftColorClass(proj ? proj.color : 'bg-gray-500');
+                        const strike = t.status === 'Done' ? 'line-through opacity-50' : '';
+                        return `<div class="${softColor} bg-opacity-40 text-[7px] sm:text-[9px] px-1 py-0.5 sm:truncate font-bold rounded mb-[2px] leading-none ${strike}"><span class="hidden sm:inline">${t.title}</span></div>`;
+                    }).join('');
+                }
 
                 html += `
                 <div onclick="window.selectDate('${dateStr}')" class="min-h-[70px] lg:min-h-[110px] border rounded-lg lg:rounded-xl relative transition cursor-pointer flex flex-col overflow-hidden ${isSelected ? `${window.state.theme.mainBorder} shadow-md ${isDark?'bg-gray-800':'bg-white'}` : `${isDark?'border-gray-700 bg-gray-800 hover:border-gray-500':'border-gray-200 bg-white hover:border-gray-300'}`}">
-                    <div class="px-1 lg:px-2 pt-1 lg:pt-2 flex justify-between items-center mb-1">
+                    <div class="px-1 lg:px-2 pt-1 lg:pt-2 flex justify-between items-start mb-1">
                         <span class="text-[10px] lg:text-sm font-bold w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-orange-500 text-white' : (isSelected ? `${window.state.theme.mainBg} text-white` : textCls)}">${day}</span>
+                        <div class="flex gap-0.5 flex-wrap w-full justify-end pl-1 mt-1">${projBlocks}</div>
                     </div>
                     <div class="px-1 w-full flex flex-col overflow-hidden">
-                        ${projBlocks}
                         ${taskBlocks}
                     </div>
                 </div>`;
@@ -756,11 +742,12 @@
             return html;
         }
 
-        // 7 DAYS AGENDA HELPER
         function render7DaysAgenda(isDark, textCls, headCls) {
             let html = '';
             const dStart = new Date(window.state.agendaStartDate);
-            
+            const endD = new Date(dStart); endD.setDate(dStart.getDate() + 6);
+            const titleText = `Schedule (${window.formatDDMMYY(dStart.toISOString().split('T')[0])} - ${window.formatDDMMYY(endD.toISOString().split('T')[0])})`;
+
             for(let i=0; i<7; i++) {
                 const currentD = new Date(dStart);
                 currentD.setDate(dStart.getDate() + i);
@@ -803,13 +790,25 @@
                     <div class="space-y-2 ml-2 border-l-2 ${isDark?'border-gray-700':'border-gray-100'} pl-3">${dayHTML}</div>
                 </div>`;
             }
-            if (!html) html = `<p class="text-sm ${textCls} italic text-center p-4">No tasks scheduled for the next 7 days.</p>`;
-            return html;
+            if (!html) html = `<p class="text-sm ${textCls} italic text-center p-4">No tasks scheduled for the selected 7 days.</p>`;
+
+            return `
+            <div class="flex justify-between items-center mb-4 lg:mb-6 border-b pb-4 ${isDark?'border-gray-700':'border-gray-100'}">
+                <h2 class="text-lg lg:text-xl font-bold flex items-center gap-2 ${headCls}">
+                    <i data-lucide="calendar-days" class="w-5 h-5 lg:w-6 lg:h-6 ${window.state.theme.mainText}"></i>
+                    ${titleText}
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="window.shiftAgenda(-7)" class="p-1.5 border rounded-lg ${textCls} hover:bg-black/5" title="Previous 7 Days"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>
+                    <button onclick="window.shiftAgenda(7)" class="p-1.5 border rounded-lg ${textCls} hover:bg-black/5" title="Next 7 Days"><i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+                </div>
+            </div>
+            <div class="space-y-6">
+                ${html}
+            </div>`;
         }
 
-        // WEEKLY GRID HELPER
         function renderWeeklyGrid(isDark, textCls, headCls) {
-            // Get Start of Week (Sunday) based on Selected Date
             const sDate = new Date(window.state.selectedDate);
             const dayOfWeek = sDate.getDay();
             const startOfWeek = new Date(sDate);
@@ -818,7 +817,6 @@
             let headerHTML = `<div class="col-span-1 border-r ${isDark?'border-gray-700':'border-gray-200'} text-center py-2 text-[10px] font-bold ${textCls} bg-black/5">GMT+8</div>`;
             let allDayHTML = `<div class="col-span-1 border-r ${isDark?'border-gray-700':'border-gray-200'} text-[10px] font-bold ${textCls} p-2 flex items-center justify-center bg-black/5">All Day</div>`;
             let gridBgCols = '';
-            
             const weekTasks = [];
 
             for(let i=0; i<7; i++) {
@@ -831,7 +829,6 @@
                     <span class="text-lg font-bold ${isTdy?'text-orange-600':headCls} leading-none">${curD.getDate()}</span>
                 </div>`;
                 
-                // Get All day tasks for this day
                 const aTasks = window.state.tasks.filter(t => t.date === dStr);
                 const aActions = window.state.projects.flatMap(p => p.actions.filter(a => a.date === dStr).map(a => ({...a, isProjectAction: true, projectId: p.id, projectTitle: p.title})));
                 const combined = [...aTasks, ...aActions];
@@ -843,8 +840,7 @@
                         const softClass = window.getSoftColorClass(proj ? proj.color : 'bg-gray-500');
                         adContent += `<div class="${softClass} bg-opacity-80 text-[8px] font-bold p-0.5 mb-0.5 rounded truncate shadow-sm cursor-pointer" onclick="window.openEditTaskModal(${t.isProjectAction ? t.projectId : null}, ${t.id}, ${t.isProjectAction})">${t.title||t.text}</div>`;
                     } else {
-                        // timed tasks
-                        t.colIndex = i + 1; // 1 to 7
+                        t.colIndex = i + 1;
                         weekTasks.push(t);
                     }
                 });
@@ -853,19 +849,20 @@
                 gridBgCols += `<div class="col-span-1 border-r ${isDark?'border-gray-700':'border-gray-200'} h-full"></div>`;
             }
 
-            // Timed Tasks Elements
+            // 1 Hour = 40px exact
+            const HR_HEIGHT = 40;
             let timedHTML = '';
             weekTasks.forEach(t => {
                 const [h, m] = t.startTime.split(':').map(Number);
                 const startMins = h * 60 + m;
-                let durMins = 60; // default 1 hour
+                let durMins = 60; 
                 if(t.endTime) {
                     const [eh, em] = t.endTime.split(':').map(Number);
                     durMins = (eh*60+em) - startMins;
-                    if(durMins < 15) durMins = 15; // min height
+                    if(durMins < 15) durMins = 15; 
                 }
-                const topPx = startMins; // 1 min = 1 px
-                const heightPx = durMins;
+                const topPx = (startMins / 60) * HR_HEIGHT;
+                const heightPx = (durMins / 60) * HR_HEIGHT;
                 const leftPct = (t.colIndex / 8) * 100;
                 const widthPct = 100 / 8;
 
@@ -873,7 +870,7 @@
                 const softClass = window.getSoftColorClass(proj ? proj.color : 'bg-gray-500');
 
                 timedHTML += `
-                <div class="absolute rounded-lg p-1.5 shadow-sm border overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${softClass} bg-opacity-90" 
+                <div class="absolute rounded p-1 shadow-sm border overflow-hidden cursor-pointer hover:shadow-md transition-shadow ${softClass} bg-opacity-90" 
                      style="top: ${topPx}px; left: ${leftPct}%; width: calc(${widthPct}% - 4px); height: ${heightPx}px; margin-left: 2px; z-index: 10;"
                      onclick="window.openEditTaskModal(${t.isProjectAction ? t.projectId : null}, ${t.id}, ${t.isProjectAction})">
                     <div class="text-[8px] sm:text-[9px] font-bold leading-tight truncate">${t.title||t.text}</div>
@@ -881,12 +878,12 @@
                 </div>`;
             });
 
-            // Grid time labels 1AM to 23PM
             let timeLabels = '';
-            for(let h=1; h<24; h++) {
-                const topPx = h * 60;
-                timeLabels += `<div class="absolute left-0 w-full flex items-start" style="top: ${topPx}px; height: 60px;">
-                    <div class="w-[12.5%] text-right pr-2 -mt-2 text-[9px] font-bold ${textCls}">${h}:00</div>
+            for(let h=0; h<=24; h++) {
+                const topPx = h * HR_HEIGHT;
+                timeLabels += `
+                <div class="absolute w-full flex border-t ${isDark?'border-gray-700':'border-gray-200'}" style="top: ${topPx}px; height: ${HR_HEIGHT}px;">
+                    <div class="w-[12.5%] text-right pr-2 text-[9px] font-bold ${textCls} -mt-2">${h===0?'':h+':00'}</div>
                 </div>`;
             }
 
@@ -905,7 +902,6 @@
                 ${allDayHTML}
             </div>
             <div class="flex-1 overflow-y-auto relative bg-white ${isDark?'bg-gray-900':''}">
-                <div class="absolute inset-0 time-grid-bg ${isDark?'opacity-10':'opacity-30'}"></div>
                 <div class="absolute inset-0 grid grid-cols-8 z-0">
                     <div class="col-span-1 border-r ${isDark?'border-gray-700':'border-gray-200'}"></div>
                     ${gridBgCols}
@@ -913,12 +909,11 @@
                 <div class="absolute inset-0 z-0">
                     ${timeLabels}
                 </div>
-                <!-- 1440px total height -->
-                <div class="absolute top-0 left-0 w-full h-[1440px] pointer-events-none"></div>
+                <!-- 24 hours * 40px = 960px -->
+                <div class="absolute top-0 left-0 w-full h-[960px] pointer-events-none"></div>
                 ${timedHTML}
             </div>`;
         }
-
 
         // ==========================================
         // TABS: SETTINGS
@@ -949,7 +944,6 @@
                     <p class="${textCls} text-xs lg:text-sm">Manage your profile, theme, and integrations.</p>
                 </div>
                 <div class="p-6 lg:p-8 space-y-8 lg:space-y-10">
-                    
                     <div class="flex flex-col sm:flex-row items-center gap-6 ${isDark?'bg-gray-900 border-gray-800':'bg-gray-50 border-gray-100'} p-6 rounded-2xl border">
                         <img src="${window.state.currentUser?.photoURL || 'https://via.placeholder.com/150'}" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white shadow-sm object-cover">
                         <div class="flex-1 text-center sm:text-left">
@@ -979,12 +973,10 @@
                         <p class="text-xs ${textCls} mb-4">Set up a bot to send you a daily digest of tasks. Type your Telegram Username (without @).</p>
                         <div class="flex flex-col gap-4 max-w-md">
                             <input type="text" id="settings-telegram" value="${window.state.telegramUsername || ''}" placeholder="e.g. netalennn" class="w-full border ${isDark?'border-gray-600 bg-gray-700 text-white':'border-gray-200 bg-white text-gray-800'} rounded-xl px-4 py-2 focus:outline-none focus:ring-2" />
-                            
                             <label class="flex items-center gap-3 cursor-pointer">
                                 <input type="checkbox" id="settings-auto" ${window.state.enableAutoReminder ? 'checked' : ''} class="w-4 h-4" />
                                 <span class="text-sm font-bold ${headCls}">Enable Automatic Daily Reminder</span>
                             </label>
-
                             <div class="flex gap-3 mt-2">
                                 <button onclick="window.saveTelegramSettings()" class="${window.state.theme.mainBg} text-white px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition">Save Preferences</button>
                                 <button onclick="window.testTelegramMsg()" class="bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm hover:opacity-90 transition flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4"></i> Test Send</button>
@@ -1008,9 +1000,10 @@
             const labelCls = isDark ? 'text-gray-300' : 'text-gray-700';
 
             const projOpts = window.state.projects.map(p => `<option value="${p.id}" ${data.projectId == p.id ? 'selected' : ''}>${p.title}</option>`).join('');
-            
             const STATUSES = ['To Do', 'In Progress', 'Done'];
             const statusOpts = STATUSES.map(s => `<option value="${s}" ${data.status == s ? 'selected' : ''}>${s}</option>`).join('');
+            const PRIORITIES = ['Low', 'Medium', 'High'];
+            const priorityOpts = PRIORITIES.map(p => `<option value="${p}" ${data.priority == p ? 'selected' : ''}>${p}</option>`).join('');
 
             return `
             <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
@@ -1020,24 +1013,28 @@
                         <button onclick="window.closeTaskModal()" class="text-gray-400 hover:text-red-500 transition p-1.5 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
                     </div>
                     <div class="p-4 lg:p-6 overflow-y-auto scrollbar-hide space-y-4 lg:space-y-5 flex-1">
-                        
                         <div>
                             <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2">Task Name</label>
                             <input type="text" id="utm-title" value="${data.title.replace(/"/g, '&quot;')}" placeholder="e.g. Write weekly report..." class="w-full border ${inputCls} rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm font-medium" />
                         </div>
-                        
+                        <div>
+                            <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2"><i data-lucide="briefcase" class="w-3 h-3 inline"></i> Project (Category)</label>
+                            <select id="utm-project" class="w-full border ${inputCls} rounded-xl px-3 py-2.5 text-xs lg:text-sm outline-none" ${isEditing ? 'disabled' : ''}>
+                                <option value="">General</option>
+                                ${projOpts}
+                            </select>
+                        </div>
                         <div class="grid grid-cols-2 gap-3 lg:gap-4">
-                            <div>
-                                <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2"><i data-lucide="briefcase" class="w-3 h-3 inline"></i> Project</label>
-                                <select id="utm-project" class="w-full border ${inputCls} rounded-xl px-3 py-2.5 text-xs lg:text-sm outline-none" ${isEditing ? 'disabled' : ''}>
-                                    <option value="">General</option>
-                                    ${projOpts}
-                                </select>
-                            </div>
                             <div>
                                 <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2"><i data-lucide="loader-2" class="w-3 h-3 inline"></i> Status</label>
                                 <select id="utm-status" class="w-full border ${inputCls} rounded-xl px-3 py-2.5 text-xs lg:text-sm outline-none font-medium">
                                     ${statusOpts}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2"><i data-lucide="alert-circle" class="w-3 h-3 inline"></i> Priority Level</label>
+                                <select id="utm-priority" class="w-full border ${inputCls} rounded-xl px-3 py-2.5 text-xs lg:text-sm outline-none font-medium">
+                                    ${priorityOpts}
                                 </select>
                             </div>
                         </div>
@@ -1049,12 +1046,18 @@
                             </div>
                             <div class="col-span-3 sm:col-span-2 grid grid-cols-2 gap-2">
                                 <div class="relative">
-                                    <label class="block text-[10px] lg:text-xs font-bold ${labelCls} mb-1">Start Time</label>
-                                    <input type="time" id="utm-start" value="${data.startTime || ''}" class="w-full border ${inputCls} rounded-lg px-2 py-1.5 text-xs outline-none" />
+                                    <label class="block text-[10px] lg:text-xs font-bold ${labelCls} mb-1 flex justify-between">
+                                        Start Time
+                                        <div class="flex items-center gap-1">
+                                            <input type="checkbox" id="utm-allday" ${data.isAllDay ? 'checked' : ''} onchange="window.toggleDOMAllDay(this.checked)" class="w-2 h-2 rounded" />
+                                            <label for="utm-allday" class="text-[9px] font-normal cursor-pointer">All Day</label>
+                                        </div>
+                                    </label>
+                                    <input type="time" id="utm-start" value="${data.startTime || ''}" class="w-full border ${inputCls} rounded-lg px-2 py-1.5 text-xs outline-none ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" ${data.isAllDay ? 'disabled' : ''} />
                                 </div>
                                 <div>
                                     <label class="block text-[10px] lg:text-xs font-bold ${labelCls} mb-1">End Time</label>
-                                    <input type="time" id="utm-end" value="${data.endTime || ''}" class="w-full border ${inputCls} rounded-lg px-2 py-1.5 text-xs outline-none" />
+                                    <input type="time" id="utm-end" value="${data.endTime || ''}" class="w-full border ${inputCls} rounded-lg px-2 py-1.5 text-xs outline-none ${data.isAllDay ? 'opacity-50 cursor-not-allowed' : ''}" ${data.isAllDay ? 'disabled' : ''} />
                                 </div>
                             </div>
                         </div>
@@ -1063,11 +1066,10 @@
                             <label class="block text-xs lg:text-sm font-bold ${labelCls} mb-1 lg:mb-2"><i data-lucide="align-left" class="w-3 h-3 inline"></i> Details</label>
                             <textarea id="utm-details" rows="3" placeholder="Notes, links, or sub-tasks..." class="w-full border ${inputCls} rounded-xl px-3 py-2 text-xs lg:text-sm outline-none resize-none">${data.details || ''}</textarea>
                         </div>
-
                     </div>
                     <div class="p-4 lg:p-5 border-t ${isDark?'border-gray-700 bg-gray-800':'border-gray-100 bg-gray-50'} flex gap-3 flex-shrink-0">
                         ${isEditing ? `<button onclick="window.deleteUnifiedTask()" class="flex-shrink-0 p-2 lg:p-3 bg-red-100 text-red-600 hover:bg-red-200 rounded-xl transition" title="Delete Task"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
-                        <button onclick="window.saveUnifiedTask()" class="flex-1 ${window.state.theme.mainBg} text-white font-bold py-2 lg:py-3 rounded-xl ${window.state.theme.hoverBg} transition text-sm shadow-sm">Save</button>
+                        <button onclick="window.saveUnifiedTask()" class="flex-1 ${window.state.theme.mainBg} text-white font-bold py-2 lg:py-3 rounded-xl ${window.state.theme.hoverBg} transition text-sm shadow-sm">Save Task</button>
                     </div>
                 </div>
             </div>`;
@@ -1124,12 +1126,10 @@
         window.saveSettingsName = () => { window.state.userName = document.getElementById('settings-username').value; window.saveToStorage(); window.refreshTab(); };
         window.changeTheme = (themeId) => { window.state.theme = THEMES.find(t => t.id === themeId); window.saveToStorage(); window.refreshTab(); };
         
-        // Dashboard
         window.changeSummaryDate = (type, val) => { if(type === 'month') window.state.calMonth = parseInt(val); else window.state.calYear = parseInt(val); window.refreshTab(); };
         window.toggleMonthSummary = () => { window.state.showMonthSummary = !window.state.showMonthSummary; window.refreshTab(); };
         window.setDashboardView = (mode) => { window.state.dashboardViewMode = mode; window.refreshTab(); };
 
-        // Calendar
         window.setCalendarMode = (mode) => { window.state.calendarViewMode = mode; window.refreshTab(); };
         window.changeMonth = (offset) => {
             let newM = window.state.calMonth + offset; let newY = window.state.calYear;
@@ -1144,26 +1144,30 @@
             window.refreshTab();
         };
 
-        // Project Move
-        window.moveProject = (dir, id) => {
-            const idx = window.state.projects.findIndex(p => p.id === id);
-            if(idx < 0) return;
-            if(dir === -1 && idx > 0) {
-                let tmp = window.state.projects[idx].order;
-                window.state.projects[idx].order = window.state.projects[idx-1].order;
-                window.state.projects[idx-1].order = tmp;
-            } else if (dir === 1 && idx < window.state.projects.length - 1) {
-                let tmp = window.state.projects[idx].order;
-                window.state.projects[idx].order = window.state.projects[idx+1].order;
-                window.state.projects[idx+1].order = tmp;
-            }
-            window.state.projects.sort((a,b) => a.order - b.order);
-            window.state.projects.forEach((p, i) => p.order = i); // normalize
+        // Project Move (Drag Drop)
+        window.dragStartProject = (e, pId) => {
+            e.dataTransfer.setData('type', 'project');
+            e.dataTransfer.setData('projectId', pId.toString());
+        };
+        window.dropProject = (e, targetPId) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if(e.dataTransfer.getData('type') !== 'project') return;
+            const sourcePId = parseInt(e.dataTransfer.getData('projectId'));
+            if(sourcePId === targetPId) return;
+
+            const sIdx = window.state.projects.findIndex(p => p.id === sourcePId);
+            const tIdx = window.state.projects.findIndex(p => p.id === targetPId);
+            
+            const [moved] = window.state.projects.splice(sIdx, 1);
+            window.state.projects.splice(tIdx, 0, moved);
+            
+            window.state.projects.forEach((p, i) => p.order = i);
             window.saveToStorage(); window.refreshTab();
         };
+
         window.toggleProjectCollapse = (id) => { window.state.projects = window.state.projects.map(p => p.id === id ? {...p, isCollapsed: !p.isCollapsed} : p); window.saveToStorage(); window.refreshTab(); };
 
-        // Status Update inline
         window.updateItemStatus = (projectId, taskId, isAction, newStatus) => {
             if (isAction) {
                 window.state.projects = window.state.projects.map(p => {
@@ -1178,11 +1182,15 @@
             window.saveToStorage(); window.refreshTab();
         };
 
-        // Drag Drop
-        window.dragStart = (e, pId, aId) => { e.dataTransfer.setData('text/plain', JSON.stringify({ pId, aId })); };
+        window.dragStart = (e, pId, aId) => { 
+            e.dataTransfer.setData('type', 'task');
+            e.dataTransfer.setData('payload', JSON.stringify({ pId, aId })); 
+        };
         window.allowDrop = (e) => { e.preventDefault(); };
         window.dropCard = (e, targetPId, newStatus) => {
-            e.preventDefault(); const dataStr = e.dataTransfer.getData('text/plain'); if(!dataStr) return; const data = JSON.parse(dataStr);
+            e.preventDefault(); 
+            if(e.dataTransfer.getData('type') !== 'task') return;
+            const dataStr = e.dataTransfer.getData('payload'); if(!dataStr) return; const data = JSON.parse(dataStr);
             if(data.pId === targetPId) {
                 window.updateItemStatus(targetPId, data.aId, true, newStatus);
             }
@@ -1190,13 +1198,13 @@
 
         // Task Modal
         window.openCreateTaskModal = (prefillProjectId = '') => { 
-            window.state.taskModalData = { id: null, title: '', projectId: prefillProjectId, status: 'To Do', priority: 'Medium', date: '', startTime: '', endTime: '', details: '', category: '', isEdit: false }; 
+            window.state.taskModalData = { id: null, title: '', projectId: prefillProjectId, status: 'To Do', priority: 'Medium', date: '', startTime: '', endTime: '', details: '', category: '', isAllDay: false, isEdit: false }; 
             window.state.isTaskModalOpen = true; window.renderModals(); 
         };
         window.openEditTaskModal = (projectId, taskId, isAction) => {
             if (isAction) {
                 const proj = window.state.projects.find(p => p.id === projectId); const act = proj.actions.find(a => a.id === taskId);
-                window.state.taskModalData = { id: act.id, title: act.text, projectId: proj.id, status: act.status, priority: act.priority, date: act.date||'', startTime: act.startTime||'', endTime: act.endTime||'', details: act.details || '', category: proj.title, isEdit: true };
+                window.state.taskModalData = { id: act.id, title: act.text, projectId: proj.id, status: act.status, priority: act.priority, date: act.date||'', startTime: act.startTime||'', endTime: act.endTime||'', details: act.details || '', category: proj.title, isAllDay: !act.startTime, isEdit: true };
             } else {
                 const t = window.state.tasks.find(t => t.id === taskId);
                 window.state.taskModalData = { ...t, projectId: '', isEdit: true };
@@ -1205,24 +1213,41 @@
         };
         window.closeTaskModal = () => { window.state.isTaskModalOpen = false; window.renderModals(); };
         
+        window.toggleDOMAllDay = (checked) => {
+            const st = document.getElementById('utm-start');
+            const ed = document.getElementById('utm-end');
+            if(checked) {
+                st.disabled = true; ed.disabled = true;
+                st.classList.add('opacity-50', 'cursor-not-allowed');
+                ed.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                st.disabled = false; ed.disabled = false;
+                st.classList.remove('opacity-50', 'cursor-not-allowed');
+                ed.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        };
+
         window.saveUnifiedTask = () => {
             const d = window.state.taskModalData; const title = document.getElementById('utm-title').value; if (!title) return;
             const projId = document.getElementById('utm-project').value, status = document.getElementById('utm-status').value, date = document.getElementById('utm-date').value, details = document.getElementById('utm-details').value;
-            const startTime = document.getElementById('utm-start').value, endTime = document.getElementById('utm-end').value;
+            const priority = document.getElementById('utm-priority').value;
+            const isAllDayEl = document.getElementById('utm-allday'); const isAllDay = isAllDayEl ? isAllDayEl.checked : false;
+            const startTime = isAllDay ? '' : document.getElementById('utm-start').value;
+            const endTime = isAllDay ? '' : document.getElementById('utm-end').value;
             const isDone = status === 'Done';
+            
             const projObj = projId ? window.state.projects.find(p => p.id === parseInt(projId)) : null;
             const categoryName = projObj ? projObj.title : 'General';
-            const priority = 'Medium'; // Hidden priority logic defaulting to medium
 
             if (d.isEdit) {
                 if (d.projectId) {
                     window.state.projects = window.state.projects.map(p => {
                         if (p.id === d.projectId) {
-                            p.actions = p.actions.map(a => a.id === d.id ? { ...a, text: title, date, startTime, endTime, status, details, isCompleted: isDone } : a);
+                            p.actions = p.actions.map(a => a.id === d.id ? { ...a, text: title, date, startTime, endTime, priority, status, details, isCompleted: isDone } : a);
                             const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = Math.round((comp / p.actions.length) * 100);
                         } return p;
                     });
-                } else window.state.tasks = window.state.tasks.map(t => t.id === d.id ? { ...t, title, date, startTime, endTime, priority, status, details, category: categoryName, done: isDone } : t);
+                } else window.state.tasks = window.state.tasks.map(t => t.id === d.id ? { ...t, title, date, startTime, endTime, priority, status, details, category: categoryName, done: isDone, isAllDay } : t);
             } else {
                 if (projId) {
                     window.state.projects = window.state.projects.map(p => {
@@ -1231,9 +1256,9 @@
                             const comp = p.actions.filter(a => a.status === 'Done').length; p.progress = Math.round((comp / p.actions.length) * 100);
                         } return p;
                     });
-                } else window.state.tasks.push({ id: Date.now(), title, date, startTime, endTime, priority, status, details, category: categoryName, done: isDone, isAllDay: !startTime });
+                } else window.state.tasks.push({ id: Date.now(), title, date, startTime, endTime, priority, status, details, category: categoryName, done: isDone, isAllDay });
             }
-            window.state.isTaskModalOpen = false; window.saveToStorage(); window.refreshTab(); // Refresh tab handles modal auto-close and scroll
+            window.state.isTaskModalOpen = false; window.saveToStorage(); window.refreshTab();
         };
 
         window.deleteUnifiedTask = () => {
@@ -1267,7 +1292,7 @@
         };
         window.deleteProject = () => { window.state.projects = window.state.projects.filter(p => p.id !== window.state.projectForm.id); window.state.isProjectModalOpen = false; window.saveToStorage(); window.refreshTab(); };
 
-        // Telegram Integration
+        // Telegram
         const BOT_TOKEN = "8620644076:AAFMscJ0jQN5PKiGHMA6gGi7cqDC4WRO7W8";
         window.saveTelegramSettings = () => {
             window.state.telegramUsername = document.getElementById('settings-telegram').value.replace('@','').trim();
@@ -1277,14 +1302,12 @@
         window.testTelegramMsg = async () => {
             const uname = document.getElementById('settings-telegram').value.replace('@','').trim();
             if(!uname) return alert("Please enter your Telegram username first.");
-            alert("Memeriksa riwayat chat bot... Pastikan Anda sudah chat 'Halo' ke bot Anda!");
-            
+            alert("Memeriksa riwayat chat bot...");
             try {
                 const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates`);
                 const data = await res.json();
                 const chatObj = data.result.reverse().find(u => u.message && u.message.from && u.message.from.username && u.message.from.username.toLowerCase() === uname.toLowerCase());
                 if(!chatObj) return alert(`Gagal: Bot tidak menemukan chat dari @${uname}. Chat bot Anda sekarang dan coba lagi.`);
-                
                 const chatId = chatObj.message.chat.id;
                 await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
